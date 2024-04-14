@@ -113,8 +113,16 @@ Release() {
     mkdir "$basepath/release"
   fi
 
-  cp "$basepath/build/rocketmq.node" "$basepath/release/$1-rocketmq-no-strip.node"
-  $STRIP -x "$basepath/release/$1-rocketmq-no-strip.node" -o "$basepath/release/$1-rocketmq.node"
+    if [ ! -d "$basepath/debug" ]; then
+      mkdir "$basepath/debug"
+    fi
+
+  cp "$basepath/build/rocketmq.node" "$basepath/debug/$1-rocketmq.node"
+  if [ "$OS" == "Darwin" ]; then
+    $STRIP -x -c "$basepath/debug/$1-rocketmq.node" -o "$basepath/release/$1-rocketmq.node"
+  else
+    $STRIP "$basepath/debug/$1-rocketmq.node" -o "$basepath/release/$1-rocketmq.node"
+  fi
 }
 
 Clean() {
@@ -148,7 +156,7 @@ Clean && BuildForLinux "aarch64" && Release "linux-aarch64"
 exit 0
     ;;
   "Darwin")
-Clean && BuildForDarwin && Release "darwin"
+Clean && BuildForDarwin && Release "darwin-universal"
 exit 0
     ;;
   *)

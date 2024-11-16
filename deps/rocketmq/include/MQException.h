@@ -26,6 +26,14 @@
 
 namespace rocketmq {
 
+#ifdef NDEBUG
+#define MQ_DEBUG_INFO ""
+#define MQ_DEBUG_LINE 0
+#else
+#define MQ_DEBUG_INFO __FILE__
+#define MQ_DEBUG_LINE __LINE__
+#endif
+
 /**
  * MQException - base exception
  */
@@ -54,7 +62,10 @@ class ROCKETMQCLIENT_API MQException : public std::exception {
   const char* what() const noexcept override {
     if (what_.empty()) {
       std::stringstream ss;
-      ss << "[" << type_ << "] msg: " << msg_ << ", error: " << error_ << ", in <" << file_ << ":" << line_ << ">";
+      ss << "[" << type_ << "] msg: " << msg_ << ", error: " << error_;
+      #ifndef NDEBUG
+      ss << ", in <" << file_ << ":" << line_ << ">";
+      #endif
       what_ = ss.str();
     }
     return what_.c_str();
@@ -121,11 +132,11 @@ DEFINE_MQEXCEPTION2(RemotingTooMuchRequestException, RemotingException)
 DEFINE_MQEXCEPTION(UnknownHostException)
 DEFINE_MQEXCEPTION(RequestTimeoutException)
 
-#define THROW_MQEXCEPTION(e, msg, err) throw e((msg), (err), __FILE__, __LINE__)
-#define THROW_MQEXCEPTION2(e, msg, err, cause) throw e((msg), (err), (cause), __FILE__, __LINE__)
+#define THROW_MQEXCEPTION(e, msg, err) throw e((msg), (err), MQ_DEBUG_INFO, MQ_DEBUG_LINE)
+#define THROW_MQEXCEPTION2(e, msg, err, cause) throw e((msg), (err), (cause), MQ_DEBUG_INFO, MQ_DEBUG_LINE)
 
-#define NEW_MQEXCEPTION(e, msg, err) e((msg), (err), __FILE__, __LINE__)
-#define NEW_MQEXCEPTION2(e, msg, err, cause) e((msg), (err), (cause), __FILE__, __LINE__)
+#define NEW_MQEXCEPTION(e, msg, err) e((msg), (err), MQ_DEBUG_INFO, MQ_DEBUG_LINE)
+#define NEW_MQEXCEPTION2(e, msg, err, cause) e((msg), (err), (cause), MQ_DEBUG_INFO, MQ_DEBUG_LINE)
 
 }  // namespace rocketmq
 

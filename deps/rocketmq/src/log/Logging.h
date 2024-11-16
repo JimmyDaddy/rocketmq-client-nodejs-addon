@@ -35,6 +35,17 @@
 
 namespace rocketmq {
 
+// Add debug control macros
+#ifdef NDEBUG
+#define LOG_DEBUG_INFO ""
+#define LOG_DEBUG_LINE 0
+#define LOG_DEBUG_FUNC ""
+#else
+#define LOG_DEBUG_INFO __FILE__
+#define LOG_DEBUG_LINE __LINE__
+#define LOG_DEBUG_FUNC SPDLOG_FUNCTION
+#endif
+
 class Logger {
  public:
   Logger(const LoggerConfig& config);
@@ -140,7 +151,7 @@ LoggerConfig& GetDefaultLoggerConfig();
 Logger& GetDefaultLogger();
 
 #define LOG_SOURCE_LOCATION \
-  spdlog::source_loc { __FILE__, __LINE__, SPDLOG_FUNCTION }
+  spdlog::source_loc { LOG_DEBUG_INFO, LOG_DEBUG_LINE, LOG_DEBUG_FUNC }
 
 #define LOG_FATAL(...) GetDefaultLogger().FatalPrintf(LOG_SOURCE_LOCATION, __VA_ARGS__)
 #define LOG_ERROR(...) GetDefaultLogger().ErrorPrintf(LOG_SOURCE_LOCATION, __VA_ARGS__)

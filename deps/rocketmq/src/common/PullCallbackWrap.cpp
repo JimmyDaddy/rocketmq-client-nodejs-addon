@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 #include "PullCallbackWrap.h"
-
+#include "MQException.h"
 #include <cassert>
 
 namespace rocketmq {
@@ -72,7 +72,7 @@ void PullCallbackWrap::operationComplete(ResponseFuture* responseFuture) noexcep
     } else {
       err = "unknown reason";
     }
-    MQException exception(err, -1, __FILE__, __LINE__);
+    MQException exception(err, -1, MQ_DEBUG_INFO, MQ_DEBUG_LINE);
     pull_callback_->invokeOnException(exception);
   }
 }

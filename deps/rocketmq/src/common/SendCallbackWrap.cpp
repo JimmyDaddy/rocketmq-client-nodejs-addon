@@ -15,9 +15,9 @@
  * limitations under the License.
  */
 #include "SendCallbackWrap.h"
+#include "MQException.h"
 
 #include <cassert>
-
 #include <typeindex>
 
 #include "DefaultMQProducer.h"
@@ -82,7 +82,7 @@ SendCallbackWrap::SendCallbackWrap(const std::string& addr,
 void SendCallbackWrap::operationComplete(ResponseFuture* responseFuture) noexcept {
   auto producer = producer_.lock();
   if (nullptr == producer) {
-    MQException exception("DefaultMQProducer is released.", -1, __FILE__, __LINE__);
+    MQException exception("DefaultMQProducer is released.", -1, MQ_DEBUG_INFO, MQ_DEBUG_LINE);
     send_callback_->invokeOnException(exception);
     return;
   }
@@ -140,7 +140,7 @@ void SendCallbackWrap::operationComplete(ResponseFuture* responseFuture) noexcep
     } else {
       err = "unknown reason";
     }
-    MQException exception(err, -1, __FILE__, __LINE__);
+    MQException exception(err, -1, MQ_DEBUG_INFO, MQ_DEBUG_LINE);
     return onExceptionImpl(responseFuture, responseFuture->leftTime(), exception, true);
   }
 }
@@ -151,7 +151,7 @@ void SendCallbackWrap::onExceptionImpl(ResponseFuture* responseFuture,
                                        bool needRetry) {
   auto producer = producer_.lock();
   if (nullptr == producer) {
-    MQException exception("DefaultMQProducer is released.", -1, __FILE__, __LINE__);
+    MQException exception("DefaultMQProducer is released.", -1, MQ_DEBUG_INFO, MQ_DEBUG_LINE);
     send_callback_->invokeOnException(exception);
     return;
   }

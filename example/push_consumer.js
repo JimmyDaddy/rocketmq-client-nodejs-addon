@@ -1,20 +1,22 @@
 "use strict";
 
-const common = require("./common");
-const PushConsumer = require("../").PushConsumer;
+const common = require('./common');
+const PushConsumer = require('../').PushConsumer;
 
 void function () {
-    const consumer = new PushConsumer("GID_GROUP", {
+    const consumer = new PushConsumer('GID_GROUP', {
         nameServer: common.nameServer,
     });
 
-    consumer.subscribe("TP_TOPIC", "*");
-    consumer.on("message", function(msg, ack) {
+    consumer.setSessionCredentials('accessKey', 'secretKey', 'ALIYUN');
+
+    consumer.subscribe('TP_TOPIC', '*');
+    consumer.on('message', function(msg, ack) {
             console.log(msg)
             ack.done();
     })
 
     consumer.start(function() {
-        console.log("consumer started");
+        console.log('consumer started');
     });
 }();

@@ -11,36 +11,113 @@ echo $basepath
 
 InstallMusl() {
   local MUSL_VERSION="musl-1.2.5"
-  if [ ! -d "$basepath/toolchain" ] ; then
-    mkdir -p "$basepath/toolchain"
+  local MUSL_URL="https://musl.libc.org/releases/$MUSL_VERSION.tar.gz"
+  local MUSL_FILE="$MUSL_VERSION.tar.gz"
+  local MUSL_DIR="$basepath/toolchain/musl"
+  local TOOLCHAIN_DIR="$basepath/toolchain"
+
+  # Create toolchain directory if it doesn't exist
+  if [ ! -d "$TOOLCHAIN_DIR" ]; then
+    mkdir -p "$TOOLCHAIN_DIR"
   fi
-  if [ ! -d "$basepath/toolchain/musl" ] ; then
-    pushd "$basepath/toolchain" > /dev/null
 
+  # Check if musl tarball exists
+  if [ -f "$TOOLCHAIN_DIR/$MUSL_FILE" ]; then
+    echo "musl tarball found, verifying integrity..."
+    pushd "$TOOLCHAIN_DIR" > /dev/null
+    
+    # Verify tarball integrity
+    if tar -tzf "$MUSL_FILE" > /dev/null 2>&1; then
+      echo "musl tarball is valid"
+      
+      # Extract if musl directory doesn't exist
+      if [ ! -d "$MUSL_DIR" ]; then
+        echo "Extracting musl..."
+        tar -xzf "$MUSL_FILE"
+        mv "$MUSL_VERSION" musl
+      else
+        echo "musl is already extracted"
+      fi
+      
+      popd > /dev/null
+      return
+    else
+      echo "musl tarball is corrupted, will download again"
+      rm "$MUSL_FILE"
+    fi
+    
+    popd > /dev/null
+  fi
+
+  # Download and install musl if not present or corrupted
+  if [ ! -d "$MUSL_DIR" ]; then
+    pushd "$TOOLCHAIN_DIR" > /dev/null
+    
     echo "Downloading musl version $MUSL_VERSION..."
-    curl -OL https://musl.libc.org/releases/$MUSL_VERSION.tar.gz
+    curl -OL "$MUSL_URL"
 
-    tar -xzf $MUSL_VERSION.tar.gz
-    mv $MUSL_VERSION musl
+    echo "Extracting musl..."
+    tar -xzf "$MUSL_FILE"
+    mv "$MUSL_VERSION" musl
 
     popd > /dev/null
+    echo "musl installation complete"
   fi
 }
 
 InstallZig() {
-  local ZIG_VERSION="zig-macos-aarch64-0.12.0-dev.3633+f7a76bdfe"
-  if [ ! -d "$basepath/toolchain" ] ; then
-    mkdir -p "$basepath/toolchain"
+  local ZIG_VERSION="zig-macos-aarch64-0.13.0"
+  local ZIG_URL="https://ziglang.org/builds/$ZIG_VERSION.tar.xz"
+  local ZIG_FILE="$ZIG_VERSION.tar.xz"
+  local ZIG_DIR="$basepath/toolchain/zig"
+  local TOOLCHAIN_DIR="$basepath/toolchain"
+
+  # Create toolchain directory if it doesn't exist
+  if [ ! -d "$TOOLCHAIN_DIR" ]; then
+    mkdir -p "$TOOLCHAIN_DIR"
   fi
-  if [ ! -d "$basepath/toolchain/zig" ] ; then
-    pushd "$basepath/toolchain" > /dev/null
 
-    curl -OL https://ziglang.org/builds/$ZIG_VERSION.tar.xz
+  # Check if Zig package exists
+  if [ -f "$TOOLCHAIN_DIR/$ZIG_FILE" ]; then
+    echo "Zig package found, verifying integrity..."
+    pushd "$TOOLCHAIN_DIR" > /dev/null
+    
+    # Verify package integrity
+    if tar -tf "$ZIG_FILE" > /dev/null 2>&1; then
+      echo "Zig package is valid"
+      
+      # Extract if Zig directory doesn't exist
+      if [ ! -d "$ZIG_DIR" ]; then
+        echo "Extracting Zig..."
+        tar -xf "$ZIG_FILE"
+        mv "$ZIG_VERSION" zig
+      else
+        echo "Zig is already extracted"
+      fi
+      
+      popd > /dev/null
+      return
+    else
+      echo "Zig package is corrupted, will download again"
+      rm "$ZIG_FILE"
+    fi
+    
+    popd > /dev/null
+  fi
 
-    tar -xf $ZIG_VERSION.tar.xz
-    mv $ZIG_VERSION zig
+  # Download and install Zig if not present or corrupted
+  if [ ! -d "$ZIG_DIR" ]; then
+    pushd "$TOOLCHAIN_DIR" > /dev/null
+    
+    echo "Downloading Zig version $ZIG_VERSION..."
+    curl -OL "$ZIG_URL"
+
+    echo "Extracting Zig..."
+    tar -xf "$ZIG_FILE"
+    mv "$ZIG_VERSION" zig
 
     popd > /dev/null
+    echo "Zig installation complete"
   fi
 }
 
@@ -61,7 +138,7 @@ BuildForLinux() {
 
   export ZIG_PATH="$basepath/toolchain/zig"
   export MUSL_LIBC_PATH="$basepath/toolchain/musl/lib/libc.a"
-  export MUSL_CROSS_PATH="/opt/homebrew/opt/musl-cross/bin"
+  export MUSL_CROSS_PATH="/opt/homebrew/opt/$CMAKE_SYSTEM_PROCESSOR-unknown-linux-musl/bin"
 
   export CC="$ZIG_PATH/zig cc -target $HOST"
   export CXX="$ZIG_PATH/zig c++ -target $HOST"
@@ -85,7 +162,7 @@ BuildForLinux() {
   popd
 
   # build rocketmq.node
-  cmake-js compile -- --CDCMAKE_SYSTEM_NAME="${CMAKE_SYSTEM_NAME}" --CDCMAKE_SYSTEM_PROCESSOR="${CMAKE_SYSTEM_PROCESSOR}" --verbose
+  npx cmake-js compile -- --CDCMAKE_SYSTEM_NAME="${CMAKE_SYSTEM_NAME}" --CDCMAKE_SYSTEM_PROCESSOR="${CMAKE_SYSTEM_PROCESSOR}" --verbose
 }
 
 BuildForDarwin() {
@@ -100,28 +177,31 @@ BuildForDarwin() {
     ./deps/rocketmq/build.sh
 
     # build rocketmq.node
-    cmake-js compile -- --CDCMAKE_OSX_ARCHITECTURES="arm64;x86_64" --DCMAKE_OSX_DEPLOYMENT_TARGET=11 --verbose
+    npx cmake-js compile -- --CDCMAKE_OSX_ARCHITECTURES="arm64;x86_64" --DCMAKE_OSX_DEPLOYMENT_TARGET=11 --verbose
 }
 
 Release() {
-  if [ -z "$1" ]; then
+  local target="$1"
+  
+  if [ -z "$target" ]; then
     echo "Error: Release argument is missing."
     return 1
   fi
 
-  if [ ! -d "$basepath/release" ]; then
-    mkdir "$basepath/release"
-  fi
+  local debug_dir="$basepath/Debug"
+  local release_dir="$basepath/Release"
+  local build_file="$basepath/build/rocketmq.node"
+  local debug_file="$debug_dir/$target-rocketmq.node"
+  local release_file="$release_dir/$target-rocketmq.node"
 
-    if [ ! -d "$basepath/debug" ]; then
-      mkdir "$basepath/debug"
-    fi
+  mkdir -p "$debug_dir" "$release_dir"
 
-  cp "$basepath/build/rocketmq.node" "$basepath/debug/$1-rocketmq.node"
+  rsync -av --checksum "$build_file" "$debug_file"
+
   if [ "$OS" == "Darwin" ]; then
-    $STRIP -x -c "$basepath/debug/$1-rocketmq.node" -o "$basepath/release/$1-rocketmq.node"
+    $STRIP -x "$debug_file" -o "$release_file"
   else
-    $STRIP "$basepath/debug/$1-rocketmq.node" -o "$basepath/release/$1-rocketmq.node"
+    $STRIP "$debug_file" -o "$release_file"
   fi
 }
 
@@ -143,24 +223,36 @@ Clean() {
 InstallMusl
 InstallZig
 
-if [ -z "$1" ]; then
-  export OS=$(uname)
-else
-  export OS=$1
-fi
+main() {
+  local os=${1:-$(uname)}
+  export OS=$os
 
-case "$OS" in
-  "Linux")
-Clean && BuildForLinux "x86_64" && Release "linux-x86_64"
-Clean && BuildForLinux "aarch64" && Release "linux-aarch64"
-exit 0
-    ;;
-  "Darwin")
-Clean && BuildForDarwin && Release "darwin-universal"
-exit 0
-    ;;
-  *)
-    echo "Error: Unsupported operating system. Only Linux and Darwin are supported."
-    exit 1
-    ;;
-esac
+  case "$OS" in
+    "Linux")
+      build_linux_targets
+      ;;
+    "Darwin")
+      build_darwin_target  
+      ;;
+    *)
+      echo "Error: Unsupported operating system. Only Linux and Darwin are supported."
+      exit 1
+      ;;
+  esac
+}
+
+build_linux_targets() {
+  local architectures=("x86_64" "aarch64")
+  
+  for arch in "${architectures[@]}"; do
+    Clean && BuildForLinux "$arch" && Release "linux-$arch"
+  done
+  exit 0
+}
+
+build_darwin_target() {
+  Clean && BuildForDarwin && Release "darwin-universal"
+  exit 0
+}
+
+main "$@"

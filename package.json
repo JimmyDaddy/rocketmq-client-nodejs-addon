@@ -1,19 +1,32 @@
 {
-  "name": "apache-rocketmq-nodejs-addon",
+  "name": "rocketmq-nodejs",
   "version": "1.0.0",
-  "description": "Apache RocketMQ binding for Node.js addon",
+  "description": "Apache RocketMQ Client for Node.js",
   "main": "index.js",
+  "files": [
+    "lib",
+    "Release",
+    "index.js"
+  ],
+  "os": [
+    "darwin",
+    "linux"
+  ],
+  "cpu": [
+    "x64",
+    "arm64"
+  ],
   "binary": {
-    "napi_versions": [9]
-  },
-  "scripts": {
-    "build": "build.sh"
+    "napi_versions": [
+      8,
+      9
+    ]
   },
   "dependencies": {
-    "bindings": "^1.5.0",
-    "node-addon-api": "^8.0.0"
+    "bindings": "^1.5.0"
   },
   "devDependencies": {
+    "node-addon-api": "^8.2.2",
     "cmake-js": "^7.3.0"
   }
 }

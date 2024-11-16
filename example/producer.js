@@ -1,8 +1,8 @@
 "use strict";
 
-const common = require("./common");
-const Producer = require("../").Producer;
-const readline = require("readline");
+const common = require('./common');
+const Producer = require('../').Producer;
+const readline = require('readline');
 
 const rl = readline.createInterface({
     input: process.stdin,
@@ -13,6 +13,9 @@ void function () {
     const producer = new Producer('GID_GROUP', {
         nameServer: common.nameServer,
     });
+
+    // producer.setSessionCredentials('accessKey', 'secretKey', 'ALIYUN')
+    
     producer.start(async function() {
         console.log('producer started');
         while(1) {
@@ -25,13 +28,13 @@ void function () {
                 producer.send('TP_TOPIC', input, function(err, ret) {
                     if (err) {
                         console.error(err);
-                        return reject(err)
+                        reject(err)
                     }
                     console.log(ret);
                     resolve(ret)
                 });
             });
-            await promise;
+            await promise.catch(console.error);
         }
     });
 

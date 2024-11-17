@@ -67,12 +67,12 @@ static std::string GetDefaultLogDir() {
     log_dir = dir;
   } else {
     log_dir = UtilAll::getHomeDirectory();
-    log_dir.append("/logs/rocketmq-cpp/");
+    log_dir.append("/logs/rocketmq/");
   }
   if (log_dir[log_dir.size() - 1] != FILE_SEPARATOR) {
     log_dir += FILE_SEPARATOR;
   }
-  std::string log_file_name = UtilAll::to_string(UtilAll::getProcessId()) + "_" + "rocketmq-cpp.log";
+  std::string log_file_name = UtilAll::to_string(UtilAll::getProcessId()) + "_" + "rocketmq.log";
   return log_dir + log_file_name;
 }
 

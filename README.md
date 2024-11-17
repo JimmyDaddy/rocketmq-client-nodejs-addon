@@ -85,7 +85,7 @@ const result = await producer.send('TP_TOPIC', 'Hello RocketMQ');
 ```
 
 Send Status Codes:
-| `Status` | `Description`         |
+| `status` | `statusStr`         |
 |----------|-----------------------|
 | `0`      | `OK`                  |
 | `1`      | `FLUSH_DISK_TIMEOUT`  |

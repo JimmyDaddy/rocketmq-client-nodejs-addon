@@ -223,7 +223,11 @@ void CallConsumerMessageJsListener(Napi::Env env,
       return;
     }
   }
-  data->promise.set_value(false);
+  try {
+    data->promise.set_value(false);
+  } catch (const std::future_error&) {
+    // ignore
+  }
 }
 
 class ConsumerMessageListener : public rocketmq::MessageListenerConcurrently {
@@ -244,6 +248,8 @@ class ConsumerMessageListener : public rocketmq::MessageListenerConcurrently {
         if (!future.get()) {
           return rocketmq::ConsumeStatus::RECONSUME_LATER;
         }
+      } catch (const std::future_error& e) {
+        // ignore
       } catch (const std::exception& e) {
         return rocketmq::ConsumeStatus::RECONSUME_LATER;
       }

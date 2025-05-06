@@ -1,7 +1,8 @@
 version: '3.8'
+
 services:
   namesrv:
-    image: apache/rocketmq:5.3.1
+    image: apache/rocketmq:4.9.6
     platform: linux/amd64
     container_name: rmqnamesrv
     ports:
@@ -9,8 +10,9 @@ services:
     networks:
       - rocketmq
     command: sh mqnamesrv
+
   broker:
-    image: apache/rocketmq:5.3.1
+    image: apache/rocketmq:4.9.6
     platform: linux/amd64
     container_name: rmqbroker
     ports:
@@ -24,21 +26,7 @@ services:
     networks:
       - rocketmq
     command: sh mqbroker
-  proxy:
-    image: apache/rocketmq:5.3.1
-    platform: linux/amd64
-    container_name: rmqproxy
-    networks:
-      - rocketmq
-    depends_on:
-      - broker
-      - namesrv
-    ports:
-      - 8080:8080
-      - 8081:8081
-    environment:
-      - NAMESRV_ADDR=rmqnamesrv:9876
-    command: sh mqproxy
+
   dashboard:
     image: apacherocketmq/rocketmq-dashboard:latest
     platform: linux/amd64
@@ -51,6 +39,7 @@ services:
       - namesrv
     networks:
       - rocketmq
+
 networks:
   rocketmq:
     driver: bridge

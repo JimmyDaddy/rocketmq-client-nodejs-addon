@@ -45,21 +45,34 @@ void ConsumerAck::SetPromise(std::promise<bool>&& promise) {
 }
 
 void ConsumerAck::Done(bool ack) {
-  promise_.set_value(ack);
+  try {
+    promise_.set_value(ack);
+  } catch (const std::future_error& e) {
+    // ignore
+  }
 }
 
 void ConsumerAck::Done(std::exception_ptr exception) {
-  promise_.set_exception(exception);
+  try {
+    promise_.set_exception(exception);
+  } catch (const std::future_error& e) {
+    // ignore
+  }
 }
 
 Napi::Value ConsumerAck::Done(const Napi::CallbackInfo& info) {
-  if (info.Length() >= 1) {
-    Napi::Value ack = info[0];
-    if (ack.IsBoolean() && !ack.ToBoolean()) {
-      Done(false);
+  try {
+    if (info.Length() >= 1) {
+      Napi::Value ack = info[0];
+      if (ack.IsBoolean() && !ack.ToBoolean()) {
+        Done(false);
+        return info.Env().Undefined();
+      }
     }
+    Done(true);
+  } catch (const std::exception& e) {
+    // ignore
   }
-  Done(true);
   return info.Env().Undefined();
 }
 

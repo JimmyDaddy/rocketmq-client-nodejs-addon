@@ -8,7 +8,7 @@ void function () {
         nameServer: common.nameServer,
     });
 
-    consumer.setSessionCredentials('accessKey', 'secretKey', 'ALIYUN');
+    // consumer.setSessionCredentials('accessKey', 'secretKey', 'ALIYUN');
 
     consumer.subscribe('TP_TOPIC', '*');
     consumer.on('message', function(msg, ack) {

@@ -119,7 +119,7 @@ if(WIN32)
   endif()
 else()
   add_compile_options(-Wall -Wno-deprecated -fPIC -fno-strict-aliasing
-                      -Wno-unused-local-typedef -Wno-expansion-to-defined)
+                      -Wno-date-time -Wno-unused-local-typedef -Wno-expansion-to-defined)
 
   if(CMAKE_BUILD_BITS EQUAL 32)
     add_compile_options(-m32)

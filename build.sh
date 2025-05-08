@@ -142,9 +142,9 @@ BuildForLinux() {
   export MUSL_LIBC_PATH="$basepath/toolchain/musl/lib/libc.a"
   export MUSL_CROSS_PATH="$homebrew/opt/$CMAKE_SYSTEM_PROCESSOR-unknown-linux-musl/bin"
 
-  export CC="$ZIG_PATH/zig cc -target $HOST"
-  export CXX="$ZIG_PATH/zig c++ -target $HOST"
-  export LINK="$ZIG_PATH/zig c++ -target $HOST -shared"
+  export CC="$ZIG_PATH/zig cc -target $HOST -fno-sanitize=undefined"
+  export CXX="$ZIG_PATH/zig c++ -target $HOST -fno-sanitize=undefined"
+  export LINK="$ZIG_PATH/zig c++ -target $HOST -shared -fno-sanitize=undefined"
   export AR="$MUSL_CROSS_PATH/$HOST-ar"
   export RANLIB="$MUSL_CROSS_PATH/$HOST-ranlib"
   export STRIP="$MUSL_CROSS_PATH/$HOST-strip"

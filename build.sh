@@ -516,11 +516,15 @@ build_darwin_target() {
 build_all_targets() {
   print_section "Building for both Linux and Darwin"
 
-  log_info "Starting Linux build..."
-  build_linux_targets
-
   log_info "Starting macOS build..."
+  # Set OS to Darwin for macOS build
+  export OS="Darwin"
   build_darwin_target
+
+  log_info "Starting Linux build..."
+  # Set OS to Linux for Linux build
+  export OS="Linux"
+  build_linux_targets
 
   log_info "All builds completed successfully"
 }

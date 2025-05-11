@@ -119,7 +119,7 @@ void RocketMQPushConsumer::SetOptions(const Napi::Object& options) {
   // set log file size
   Napi::Value log_file_size = options.Get("logFileSize");
   if (log_file_size.IsNumber()) {
-    rocketmq::GetDefaultLoggerConfig().set_file_count(log_file_size.ToNumber());
+    rocketmq::GetDefaultLoggerConfig().set_file_size(log_file_size.ToNumber());
   }
 
   // set log file num
@@ -131,6 +131,19 @@ void RocketMQPushConsumer::SetOptions(const Napi::Object& options) {
 
 Napi::Value RocketMQPushConsumer::SetSessionCredentials(
     const Napi::CallbackInfo& info) {
+  Napi::Env env = info.Env();
+
+  // Check if required parameters are provided
+  if (info.Length() < 3) {
+    Napi::TypeError::New(env, "Wrong number of arguments").ThrowAsJavaScriptException();
+    return env.Undefined();
+  }
+
+  if (!info[0].IsString() || !info[1].IsString() || !info[2].IsString()) {
+    Napi::TypeError::New(env, "All arguments must be strings").ThrowAsJavaScriptException();
+    return env.Undefined();
+  }
+
   Napi::String access_key = info[0].As<Napi::String>();
   Napi::String secret_key = info[1].As<Napi::String>();
   Napi::String ons_channel = info[2].As<Napi::String>();
@@ -139,7 +152,7 @@ Napi::Value RocketMQPushConsumer::SetSessionCredentials(
       rocketmq::SessionCredentials(access_key, secret_key, ons_channel));
   consumer_.setRPCHook(rpc_hook);
 
-  return info.Env().Undefined();
+  return env.Undefined();
 }
 
 class ConsumerStartWorker : public Napi::AsyncWorker {
@@ -155,10 +168,20 @@ class ConsumerStartWorker : public Napi::AsyncWorker {
 };
 
 Napi::Value RocketMQPushConsumer::Start(const Napi::CallbackInfo& info) {
+  Napi::Env env = info.Env();
+
+  // Check if callback is provided and is a function
+  if (info.Length() < 1 || !info[0].IsFunction()) {
+    Napi::TypeError::New(env, "Function expected as first argument").ThrowAsJavaScriptException();
+    return env.Undefined();
+  }
+
   Napi::Function callback = info[0].As<Napi::Function>();
+
+  // AsyncWorker is automatically deleted after execution
   auto* worker = new ConsumerStartWorker(callback, consumer_);
   worker->Queue();
-  return info.Env().Undefined();
+  return env.Undefined();
 }
 
 class ConsumerShutdownWorker : public Napi::AsyncWorker {
@@ -174,19 +197,47 @@ class ConsumerShutdownWorker : public Napi::AsyncWorker {
 };
 
 Napi::Value RocketMQPushConsumer::Shutdown(const Napi::CallbackInfo& info) {
+  Napi::Env env = info.Env();
+
+  // Check if callback is provided and is a function
+  if (info.Length() < 1 || !info[0].IsFunction()) {
+    Napi::TypeError::New(env, "Function expected as first argument").ThrowAsJavaScriptException();
+    return env.Undefined();
+  }
+
   Napi::Function callback = info[0].As<Napi::Function>();
+
+  // AsyncWorker is automatically deleted after execution
   auto* worker = new ConsumerShutdownWorker(callback, consumer_);
   worker->Queue();
-  return info.Env().Undefined();
+  return env.Undefined();
 }
 
 Napi::Value RocketMQPushConsumer::Subscribe(const Napi::CallbackInfo& info) {
+  Napi::Env env = info.Env();
+
+  // Check if required parameters are provided
+  if (info.Length() < 2) {
+    Napi::TypeError::New(env, "Wrong number of arguments").ThrowAsJavaScriptException();
+    return env.Undefined();
+  }
+
+  if (!info[0].IsString() || !info[1].IsString()) {
+    Napi::TypeError::New(env, "Topic and expression must be strings").ThrowAsJavaScriptException();
+    return env.Undefined();
+  }
+
   Napi::String topic = info[0].As<Napi::String>();
   Napi::String expression = info[1].As<Napi::String>();
 
-  consumer_.subscribe(topic, expression);
+  try {
+    consumer_.subscribe(topic, expression);
+  } catch (const std::exception& e) {
+    Napi::Error::New(env, e.what()).ThrowAsJavaScriptException();
+    return env.Undefined();
+  }
 
-  return info.Env().Undefined();
+  return env.Undefined();
 }
 
 struct MessageAndPromise {
@@ -198,35 +249,61 @@ void CallConsumerMessageJsListener(Napi::Env env,
                                    Napi::Function listener,
                                    std::nullptr_t*,
                                    MessageAndPromise* data) {
-  if (env != nullptr) {
-    if (listener != nullptr) {
-      Napi::Object message = Napi::Object::New(env);
-      message.Set("topic", data->message.topic());
-      message.Set("tags", data->message.tags());
-      message.Set("keys", data->message.keys());
-      message.Set("body", data->message.body());
-      message.Set("msgId", data->message.msg_id());
+  // Ensure data is valid
+  if (data == nullptr) {
+    return;
+  }
 
-      Napi::Object ack = ConsumerAck::NewInstance(env);
-      ConsumerAck* consumer_ack = Napi::ObjectWrap<ConsumerAck>::Unwrap(ack);
-      consumer_ack->SetPromise(std::move(data->promise));
+  // Handle case where env or listener is null
+  if (env == nullptr || listener == nullptr) {
+    try {
+      data->promise.set_value(false);
+    } catch (const std::future_error&) {
+      // ignore
+    }
+    return;
+  }
 
-      try {
-        listener.Call(Napi::Object::New(listener.Env()), {message, ack});
-      } catch (const Napi::Error& e) {
-        try {
-          consumer_ack->Done(std::current_exception());
-        } catch (const std::future_error&) {
-          // ignore
-        }
-      }
+  try {
+    Napi::Object message = Napi::Object::New(env);
+    message.Set("topic", data->message.topic());
+    message.Set("tags", data->message.tags());
+    message.Set("keys", data->message.keys());
+    message.Set("body", data->message.body());
+    message.Set("msgId", data->message.msg_id());
+
+    Napi::Object ack = ConsumerAck::NewInstance(env);
+    if (ack.IsEmpty()) {
+      // Failed to create ack object
+      data->promise.set_value(false);
       return;
     }
-  }
-  try {
-    data->promise.set_value(false);
-  } catch (const std::future_error&) {
-    // ignore
+
+    ConsumerAck* consumer_ack = Napi::ObjectWrap<ConsumerAck>::Unwrap(ack);
+    if (consumer_ack == nullptr) {
+      // Failed to unwrap ack object
+      data->promise.set_value(false);
+      return;
+    }
+
+    consumer_ack->SetPromise(std::move(data->promise));
+
+    try {
+      listener.Call(Napi::Object::New(listener.Env()), {message, ack});
+    } catch (const std::exception&) {
+      try {
+        consumer_ack->Done(std::current_exception());
+      } catch (const std::future_error&) {
+        // ignore
+      }
+    }
+  } catch (const std::exception&) {
+    // If anything fails, set promise to false
+    try {
+      data->promise.set_value(false);
+    } catch (const std::future_error&) {
+      // ignore
+    }
   }
 }
 

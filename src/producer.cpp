@@ -123,7 +123,7 @@ void RocketMQProducer::SetOptions(const Napi::Object& options) {
   // set log file size
   Napi::Value log_file_size = options.Get("logFileSize");
   if (log_file_size.IsNumber()) {
-    rocketmq::GetDefaultLoggerConfig().set_file_count(log_file_size.ToNumber());
+    rocketmq::GetDefaultLoggerConfig().set_file_size(log_file_size.ToNumber());
   }
 
   // set log file num
@@ -135,6 +135,19 @@ void RocketMQProducer::SetOptions(const Napi::Object& options) {
 
 Napi::Value RocketMQProducer::SetSessionCredentials(
     const Napi::CallbackInfo& info) {
+  Napi::Env env = info.Env();
+
+  // Check if required parameters are provided
+  if (info.Length() < 3) {
+    Napi::TypeError::New(env, "Wrong number of arguments").ThrowAsJavaScriptException();
+    return env.Undefined();
+  }
+
+  if (!info[0].IsString() || !info[1].IsString() || !info[2].IsString()) {
+    Napi::TypeError::New(env, "All arguments must be strings").ThrowAsJavaScriptException();
+    return env.Undefined();
+  }
+
   Napi::String access_key = info[0].As<Napi::String>();
   Napi::String secret_key = info[1].As<Napi::String>();
   Napi::String ons_channel = info[2].As<Napi::String>();
@@ -143,7 +156,7 @@ Napi::Value RocketMQProducer::SetSessionCredentials(
       rocketmq::SessionCredentials(access_key, secret_key, ons_channel));
   producer_.setRPCHook(rpc_hook);
 
-  return info.Env().Undefined();
+  return env.Undefined();
 }
 
 class ProducerStartWorker : public Napi::AsyncWorker {
@@ -159,10 +172,20 @@ class ProducerStartWorker : public Napi::AsyncWorker {
 };
 
 Napi::Value RocketMQProducer::Start(const Napi::CallbackInfo& info) {
+  Napi::Env env = info.Env();
+
+  // Check if callback is provided and is a function
+  if (info.Length() < 1 || !info[0].IsFunction()) {
+    Napi::TypeError::New(env, "Function expected as first argument").ThrowAsJavaScriptException();
+    return env.Undefined();
+  }
+
   Napi::Function callback = info[0].As<Napi::Function>();
+
+  // AsyncWorker is automatically deleted after execution
   auto* worker = new ProducerStartWorker(callback, producer_);
   worker->Queue();
-  return info.Env().Undefined();
+  return env.Undefined();
 }
 
 class ProducerShutdownWorker : public Napi::AsyncWorker {
@@ -178,10 +201,20 @@ class ProducerShutdownWorker : public Napi::AsyncWorker {
 };
 
 Napi::Value RocketMQProducer::Shutdown(const Napi::CallbackInfo& info) {
+  Napi::Env env = info.Env();
+
+  // Check if callback is provided and is a function
+  if (info.Length() < 1 || !info[0].IsFunction()) {
+    Napi::TypeError::New(env, "Function expected as first argument").ThrowAsJavaScriptException();
+    return env.Undefined();
+  }
+
   Napi::Function callback = info[0].As<Napi::Function>();
+
+  // AsyncWorker is automatically deleted after execution
   auto* worker = new ProducerShutdownWorker(callback, producer_);
   worker->Queue();
-  return info.Env().Undefined();
+  return env.Undefined();
 }
 
 struct ResultOrException {
@@ -220,27 +253,43 @@ class ProducerSendCallback : public rocketmq::AutoDeleteSendCallback {
       : callback_(
             Callback::New(env, callback, "RocketMQ Send Callback", 0, 1)) {}
 
-  ~ProducerSendCallback() { callback_.Release(); }
+  ~ProducerSendCallback() { 
+    // Release the callback to avoid memory leaks
+    callback_.Release(); 
+  }
 
   void onSuccess(rocketmq::SendResult& send_result) override {
+    // Create a copy of the send result to pass to the callback
     auto* data =
         new ResultOrException{std::unique_ptr<rocketmq::SendResult>(
                                   new rocketmq::SendResult(send_result)),
                               nullptr};
+
+    // Call the JavaScript callback with the result
     napi_status status = callback_.BlockingCall(data);
     if (status != napi_ok) {
-      // TODO: Handle error
-      std::exit(-1);
+      // If BlockingCall fails, clean up the data to avoid memory leak
+      delete data;
+
+      // Log the error but don't terminate the process
+      fprintf(stderr, "Failed to call JavaScript callback in ProducerSendCallback::onSuccess\n");
     }
   }
 
   void onException(rocketmq::MQException& exception) noexcept override {
+    // Create an exception to pass to the callback
     auto* data =
         new ResultOrException{nullptr, std::make_exception_ptr(exception)};
+
+    // Call the JavaScript callback with the exception
     napi_status status = callback_.BlockingCall(data);
     if (status != napi_ok) {
-      // TODO: Handle error
-      std::exit(-1);
+      // If BlockingCall fails, clean up the data to avoid memory leak
+      delete data;
+
+      // Log the error but don't terminate the process
+      fprintf(stderr, "Failed to call JavaScript callback in ProducerSendCallback::onException: %s\n", 
+              exception.what());
     }
   }
 
@@ -253,17 +302,43 @@ class ProducerSendCallback : public rocketmq::AutoDeleteSendCallback {
 };
 
 Napi::Value RocketMQProducer::Send(const Napi::CallbackInfo& info) {
+  Napi::Env env = info.Env();
+
+  // Check if required parameters are provided
+  if (info.Length() < 4) {
+    Napi::TypeError::New(env, "Wrong number of arguments").ThrowAsJavaScriptException();
+    return env.Undefined();
+  }
+
+  if (!info[0].IsString()) {
+    Napi::TypeError::New(env, "Topic must be a string").ThrowAsJavaScriptException();
+    return env.Undefined();
+  }
+
+  if (!info[3].IsFunction()) {
+    Napi::TypeError::New(env, "Callback must be a function").ThrowAsJavaScriptException();
+    return env.Undefined();
+  }
+
   rocketmq::MQMessage message = [&]() {
     Napi::String topic = info[0].As<Napi::String>();
     Napi::Value body = info[1];
     if (body.IsString()) {
       return rocketmq::MQMessage(topic, body.ToString());
-    } else {
+    } else if (body.IsBuffer()) {
       Napi::Buffer<char> buffer = body.As<Napi::Buffer<char>>();
       return rocketmq::MQMessage(topic,
                                  std::string(buffer.Data(), buffer.Length()));
+    } else {
+      Napi::TypeError::New(env, "Message body must be a string or buffer").ThrowAsJavaScriptException();
+      return rocketmq::MQMessage("", "");
     }
   }();
+
+  // If there was an error creating the message, return early
+  if (message.topic().empty() && message.body().empty()) {
+    return env.Undefined();
+  }
 
   const Napi::Value options_v = info[2];
   if (options_v.IsObject()) {
@@ -280,11 +355,12 @@ Napi::Value RocketMQProducer::Send(const Napi::CallbackInfo& info) {
     }
   }
 
+  // ProducerSendCallback is derived from AutoDeleteSendCallback, which is deleted by the RocketMQ client
   auto* send_callback =
       new ProducerSendCallback(info.Env(), info[3].As<Napi::Function>());
   producer_.send(message, send_callback);
 
-  return info.Env().Undefined();
+  return env.Undefined();
 }
 
 }  // namespace __node_rocketmq__

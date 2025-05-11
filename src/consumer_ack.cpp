@@ -24,6 +24,7 @@ Napi::Object ConsumerAck::Init(Napi::Env env, Napi::Object exports) {
   Napi::Function func = DefineClass(
       env, "ConsumerAck", {InstanceMethod<&ConsumerAck::Done>("done")});
 
+  // Store the constructor in env to avoid memory leak
   Napi::FunctionReference* constructor = new Napi::FunctionReference();
   *constructor = Napi::Persistent(func);
   env.SetInstanceData<Napi::FunctionReference>(constructor);

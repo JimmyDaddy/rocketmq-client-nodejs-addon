@@ -76,7 +76,7 @@ producer.send('TP_TOPIC', 'Hello RocketMQ', (err, result) => {
 
 // With options
 producer.send('TP_TOPIC', 'Hello RocketMQ', {
-    keys: ['key1', 'key2'],
+    keys: 'key1',
     tags: 'TagA',
 }, callback);
 
@@ -123,6 +123,7 @@ const consumer = new PushConsumer('GID_GROUP', 'INSTANCE_NAME', {
     nameServer: '127.0.0.1:9876',
     threadCount: 3,            // Number of consumer threads
     maxBatchSize: 32,         // Max batch size for consuming messages
+    maxReconsumeTimes: 16,    // Max retries before the message is dropped (default 16)
     logDir: '$HOME/logs/rocketmq',
     logFileNum: 3,
     logFileSize: 104857600,    // bytes, default 100MB
@@ -164,7 +165,7 @@ consumer.on('message', (msg, ack) => {
     // {
     //   topic: 'TopicTest',
     //   tags: 'TagA',
-    //   keys: ['key1', 'key2'],
+    //   keys: 'key1',
     //   body: 'Hello RocketMQ',
     //   msgId: '0101007F0000367E0000339DD68B0800'
     // }

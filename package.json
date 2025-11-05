@@ -3,10 +3,12 @@
   "version": "1.0.2",
   "description": "Apache RocketMQ Client for Node.js",
   "main": "index.js",
+  "types": "index.d.ts",
   "files": [
     "lib",
     "Release",
-    "index.js"
+    "index.js",
+    "index.d.ts"
   ],
   "os": [
     "darwin",
@@ -27,7 +29,7 @@
     "bindings": "^1.5.0"
   },
   "devDependencies": {
-    "node-addon-api": "^8.3.1",
+    "node-addon-api": "^8.5.0",
     "cmake-js": "^7.3.1"
   }
 }

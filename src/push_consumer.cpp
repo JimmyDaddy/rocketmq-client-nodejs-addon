@@ -100,6 +100,11 @@ void RocketMQPushConsumer::SetOptions(const Napi::Object& options) {
     consumer_.set_consume_message_batch_max_size(max_batch_size.ToNumber());
   }
 
+  Napi::Value max_reconsume_times = options.Get("maxReconsumeTimes");
+  if (max_reconsume_times.IsNumber()) {
+    consumer_.set_max_reconsume_times(max_reconsume_times.ToNumber());
+  }
+
   // set log level
   Napi::Value log_level = options.Get("logLevel");
   if (log_level.IsNumber()) {

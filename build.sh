@@ -15,7 +15,7 @@ HOMEBREW=$(brew --prefix)
 
 # Configuration
 MUSL_VERSION="musl-1.2.5"
-ZIG_VERSION="zig-macos-aarch64-0.15.0-dev.471+369177f0b"
+ZIG_VERSION="zig-aarch64-macos-0.15.2"
 
 # Directories
 TOOLCHAIN_DIR="$BASEPATH/toolchain"
@@ -94,6 +94,10 @@ ensure_dir() {
 install_musl() {
   print_section "Installing Musl libc"
 
+  local musl_target_dir="${MUSL_DIR:-$TOOLCHAIN_DIR/musl}"
+  MUSL_DIR="$musl_target_dir"
+  local musl_dir_name="$(basename "$MUSL_DIR")"
+
   ensure_dir "$TOOLCHAIN_DIR"
 
   # Check if musl is already installed
@@ -114,7 +118,7 @@ install_musl() {
       if [ ! -d "$MUSL_DIR" ]; then
         log_info "Extracting musl..."
         tar -xzf "$MUSL_FILE"
-        mv "$MUSL_VERSION" musl
+        mv "$MUSL_VERSION" "$musl_dir_name"
       else
         log_info "Musl is already extracted"
       fi
@@ -138,7 +142,7 @@ install_musl() {
 
     log_info "Extracting Musl..."
     tar -xzf "$MUSL_FILE"
-    mv "$MUSL_VERSION" musl
+    mv "$MUSL_VERSION" "$musl_dir_name"
 
     popd > /dev/null
     log_info "Musl installation complete"
@@ -224,9 +228,10 @@ build_for_linux() {
   export CMAKE_SYSTEM_NAME="Linux"
   export HOST="$CMAKE_SYSTEM_PROCESSOR-linux-musl"
 
-  # Set up toolchain
+  # Set up toolchain directories per architecture
+  export MUSL_DIR="$TOOLCHAIN_DIR/musl-$arch"
   export ZIG_PATH="$BASEPATH/toolchain/zig"
-  export MUSL_LIBC_PATH="$BASEPATH/toolchain/musl/lib/libc.a"
+  export MUSL_LIBC_PATH="$MUSL_DIR/lib/libc.a"
   export MUSL_CROSS_PATH="$HOMEBREW/opt/$CMAKE_SYSTEM_PROCESSOR-unknown-linux-musl/bin"
 
   # Set up compiler and linker
@@ -241,14 +246,37 @@ build_for_linux() {
   export CFLAGS="-fPIC"
   export CXXFLAGS="-fPIC"
 
+  # Ensure Musl sources are ready
+  install_musl
+
   # Build RocketMQ C++ client
   log_info "Building RocketMQ C++ client..."
   ./deps/rocketmq/build.sh
 
   # Build Musl
   log_info "Building Musl libc..."
-  pushd toolchain/musl
-  ./configure
+  pushd "$MUSL_DIR"
+
+  local configure_needed=1
+  if [[ -f config.mak ]]; then
+    if grep -q "^ARCH = $arch" config.mak; then
+      configure_needed=0
+    fi
+  fi
+
+  if [[ $configure_needed -eq 1 ]]; then
+    log_info "Configuring Musl for $HOST"
+    make distclean >/dev/null 2>&1 || true
+    CC="$CC" \
+    CXX="$CXX" \
+    AR="$AR" \
+    RANLIB="$RANLIB" \
+    ./configure --host="$HOST" --target="$HOST"
+  else
+    log_info "Musl already configured for $HOST"
+    make clean >/dev/null 2>&1 || true
+  fi
+
   make -j
   popd
 
@@ -333,8 +361,14 @@ clean() {
   find ./deps/rocketmq/tmp_down_dir -type d -name "zlib*" -exec rm -rf {} \; 2>/dev/null || true
 
   log_info "Cleaning Musl build artifacts..."
-  rm -rf ./toolchain/musl/obj
-  rm -rf ./toolchain/musl/*.o 2>/dev/null || true
+  if compgen -G "./toolchain/musl*" > /dev/null; then
+    for dir in ./toolchain/musl*; do
+      if [ -d "$dir" ]; then
+        rm -rf "$dir/obj"
+        rm -rf "$dir"/*.o 2>/dev/null || true
+      fi
+    done
+  fi
 
   log_info "Clean complete"
 }
@@ -480,7 +514,6 @@ parse_args() {
 
 # Build for all supported Linux architectures
 build_linux_targets() {
-  install_musl
   install_zig
 
   if [[ -n "$ARCH" ]]; then
@@ -506,6 +539,7 @@ build_linux_targets() {
 
 # Build for macOS (Darwin)
 build_darwin_target() {
+  export MUSL_DIR="$TOOLCHAIN_DIR/musl-darwin"
   install_musl
   install_zig
 

@@ -22,6 +22,7 @@
 #include <event2/event.h>
 
 #include <functional>  // std::function
+#include <memory>      // std::unique_ptr
 
 #include "concurrent/thread.hpp"
 #include "noncopyable.h"
@@ -109,6 +110,7 @@ class BufferEvent : public noncopyable {
 
   // cached properties
   std::string peer_addr_port_;
+  std::unique_ptr<sockaddr_storage> peer_addr_;
 };
 
 }  // namespace rocketmq

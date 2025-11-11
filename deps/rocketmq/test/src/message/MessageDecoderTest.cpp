@@ -54,13 +54,17 @@ using rocketmq::UtilAll;
 
 // TODO
 TEST(MessageDecoderTest, MessageId) {
-  std::string strMsgId = MessageDecoder::createMessageId(rocketmq::StringToSockaddr("127.0.0.1:10091"), 1024LL);
+  auto addr_v4 = rocketmq::StringToSockaddr("127.0.0.1:10091");
+  std::string strMsgId =
+      MessageDecoder::createMessageId(rocketmq::GetSockaddrPtr(addr_v4), 1024LL);
   EXPECT_EQ(strMsgId, "7F0000010000276B0000000000000400");
 
   MessageId msgId = MessageDecoder::decodeMessageId(strMsgId);
   EXPECT_EQ(msgId.getOffset(), 1024LL);
 
-  std::string strMsgId2 = MessageDecoder::createMessageId(rocketmq::StringToSockaddr("/172.16.2.114:0"), 123456LL);
+  auto addr_v6 = rocketmq::StringToSockaddr("/172.16.2.114:0");
+  std::string strMsgId2 =
+      MessageDecoder::createMessageId(rocketmq::GetSockaddrPtr(addr_v6), 123456LL);
   EXPECT_EQ(strMsgId2, "AC10027200000000000000000001E240");
 
   MessageId msgId2 = MessageDecoder::decodeMessageId(strMsgId2);
@@ -109,7 +113,7 @@ TEST(MessageDecoderTest, Decode) {
   // 10 BORNHOST  56=48+4+4
   byteBuffer->putInt(ntohl(inet_addr("127.0.0.1")));
   byteBuffer->putInt(10091);
-  msgExt.set_born_host(rocketmq::StringToSockaddr("127.0.0.1:10091"));
+  msgExt.set_born_host(rocketmq::GetSockaddrPtr(rocketmq::StringToSockaddr("127.0.0.1:10091")));
 
   // 11 STORETIMESTAMP  64=56+8
   byteBuffer->putLong(4096LL);
@@ -118,7 +122,7 @@ TEST(MessageDecoderTest, Decode) {
   // 12 STOREHOST  72=64+4+4
   byteBuffer->putInt(ntohl(inet_addr("127.0.0.2")));
   byteBuffer->putInt(10092);
-  msgExt.set_store_host(rocketmq::StringToSockaddr("127.0.0.2:10092"));
+  msgExt.set_store_host(rocketmq::GetSockaddrPtr(rocketmq::StringToSockaddr("127.0.0.2:10092")));
 
   // 13 RECONSUMETIMES 76=72+4
   byteBuffer->putInt(18);

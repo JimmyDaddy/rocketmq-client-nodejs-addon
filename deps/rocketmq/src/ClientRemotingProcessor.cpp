@@ -155,11 +155,13 @@ RemotingCommand* ClientRemotingProcessor::receiveReplyMessage(RemotingCommand* r
     msg->set_store_timestamp(requestHeader->store_timestamp());
 
     if (!requestHeader->born_host().empty()) {
-      msg->set_born_host(StringToSockaddr(requestHeader->born_host()));
+      auto born_host = StringToSockaddr(requestHeader->born_host());
+      msg->set_born_host(GetSockaddrPtr(born_host));
     }
 
     if (!requestHeader->store_host().empty()) {
-      msg->set_store_host(StringToSockaddr(requestHeader->store_host()));
+      auto store_host = StringToSockaddr(requestHeader->store_host());
+      msg->set_store_host(GetSockaddrPtr(store_host));
     }
 
     auto body = request->body();

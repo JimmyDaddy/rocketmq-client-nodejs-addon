@@ -54,6 +54,23 @@ TEST=0
 CODECOV=0
 CPU_NUM=4
 
+# Provide sensible defaults when cross-compilation environment variables are not set
+if [ -z "${CMAKE_SYSTEM_NAME}" ]; then
+  CMAKE_SYSTEM_NAME=$(uname -s)
+fi
+if [ -z "${CMAKE_SYSTEM_PROCESSOR}" ]; then
+  CMAKE_SYSTEM_PROCESSOR=$(uname -m)
+fi
+if [ -z "${AR}" ]; then
+  AR=$(command -v ar)
+fi
+if [ -z "${RANLIB}" ]; then
+  RANLIB=$(command -v ranlib)
+fi
+if [ -z "${LINK}" ]; then
+  LINK=$(command -v c++)
+fi
+
 # Log levels
 LOG_INFO="\033[0;32m[INFO]\033[0m"
 LOG_WARN="\033[0;33m[WARN]\033[0m"
@@ -459,8 +476,8 @@ build_rocketmq_client() {
   # Run CMake configure
   cmake -S "${BASEPATH}" -B "${BUILD_DIR}" "${cmake_options[@]}"
 
-  log_info "Compiling RocketMQ C++ client"
-  cmake --build "${BUILD_DIR}"
+  log_info "Compiling RocketMQ C++ client (static + bundled library)"
+  cmake --build "${BUILD_DIR}" --target rocketmq_static rocketmq_
 
   # Uncomment if installation is needed
   # log_info "Installing RocketMQ C++ client"

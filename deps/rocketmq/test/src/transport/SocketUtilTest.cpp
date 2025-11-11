@@ -29,15 +29,15 @@ using namespace rocketmq;
 
 TEST(SocketUtilTest, Convert) {
   char ip[] = {0x7F, 0x00, 0x00, 0x01};
-  struct sockaddr* sa = IPPortToSockaddr(ByteArray(ip, sizeof(ip)), 0x276B);
-  struct sockaddr_in* sin = (struct sockaddr_in*)sa;
+  auto sa = IPPortToSockaddr(ByteArray(ip, sizeof(ip)), 0x276B);
+  auto* sin = reinterpret_cast<sockaddr_in*>(sa.get());
   EXPECT_EQ(sin->sin_addr.s_addr, 0x0100007F);
   EXPECT_EQ(sin->sin_port, 0x6B27);
 
-  EXPECT_EQ(SockaddrToString(sa), "127.0.0.1:10091");
+  EXPECT_EQ(SockaddrToString(rocketmq::GetSockaddrPtr(sa)), "127.0.0.1:10091");
 
-  sa = StringToSockaddr("127.0.0.1:10091");
-  sin = (struct sockaddr_in*)sa;
+  auto sa_from_string = StringToSockaddr("127.0.0.1:10091");
+  sin = reinterpret_cast<sockaddr_in*>(sa_from_string.get());
   EXPECT_EQ(sin->sin_addr.s_addr, 0x0100007F);
   EXPECT_EQ(sin->sin_port, 0x6B27);
 }

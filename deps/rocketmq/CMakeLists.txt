@@ -121,10 +121,20 @@ else()
   add_compile_options(-Wall -Wno-deprecated -fPIC -fno-strict-aliasing
                       -Wno-date-time -Wno-unused-local-typedef -Wno-expansion-to-defined)
 
-  if(CMAKE_BUILD_BITS EQUAL 32)
-    add_compile_options(-m32)
-  else() # not-condition
+  # 检测系统架构并设置相应的编译选项
+  if(CMAKE_SYSTEM_PROCESSOR MATCHES "^(aarch64|arm64|ARM64)$")
+    # ARM64 架构不需要 -m64 参数
+    message(STATUS "** Detected ARM64 architecture: ${CMAKE_SYSTEM_PROCESSOR}")
+  elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|amd64|AMD64)$")
+    # x86_64 架构使用 -m64
     add_compile_options(-m64)
+    message(STATUS "** Detected x86_64 architecture, adding -m64 flag")
+  elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "^(i386|i686|x86)$")
+    # 32位 x86 架构使用 -m32
+    add_compile_options(-m32)
+    message(STATUS "** Detected 32-bit x86 architecture, adding -m32 flag")
+  else()
+    message(WARNING "** Unknown architecture: ${CMAKE_SYSTEM_PROCESSOR}, not adding architecture-specific flags")
   endif()
 
   # Declare deplibs, so we can use list in linker later. There's probably a more

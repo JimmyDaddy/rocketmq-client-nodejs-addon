@@ -24,6 +24,12 @@
 /* Get bool. */
 #include <stdbool.h>
 
+#define base64_encode rocketmq_signature_base64_encode
+#define base64_encode_alloc rocketmq_signature_base64_encode_alloc
+#define base64_decode rocketmq_signature_base64_decode
+#define base64_decode_alloc rocketmq_signature_base64_decode_alloc
+#define isbase64 rocketmq_signature_isbase64
+
 #ifdef __cplusplus
 namespace rocketmqSignature {
 #endif

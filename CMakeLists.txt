@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.29)
+cmake_minimum_required(VERSION 3.26)
 
 project(rocketmq)
 
@@ -29,10 +29,7 @@ set_target_properties(${PROJECT_NAME}
         RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/build"
         LIBRARY_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/build"
         ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/build")
-find_package(Threads REQUIRED)
-target_link_libraries(${PROJECT_NAME}
-        ${CMAKE_CURRENT_SOURCE_DIR}/deps/rocketmq/bin/librocketmq.a
-        Threads::Threads)
+target_link_libraries(${PROJECT_NAME} ${CMAKE_CURRENT_SOURCE_DIR}/deps/rocketmq/bin/librocketmq.a)
 
 set(CMAKE_DEPENDS_USE_COMPILER FALSE)
 set(CMAKE_SKIP_DEPENDENCY_TRACKING TRUE)

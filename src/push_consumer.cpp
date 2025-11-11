@@ -31,6 +31,10 @@ using namespace std;
 
 namespace __node_rocketmq__ {
 
+static void DeleteFunctionReference(Napi::Env, Napi::FunctionReference* data) {
+  delete data;
+}
+
 Napi::Object RocketMQPushConsumer::Init(Napi::Env env, Napi::Object exports) {
   Napi::Function func = DefineClass(
       env,
@@ -46,7 +50,7 @@ Napi::Object RocketMQPushConsumer::Init(Napi::Env env, Napi::Object exports) {
 
   Napi::FunctionReference* constructor = new Napi::FunctionReference();
   *constructor = Napi::Persistent(func);
-  env.SetInstanceData<Napi::FunctionReference>(constructor);
+  env.SetInstanceData<Napi::FunctionReference, DeleteFunctionReference>(constructor);
 
   exports.Set("PushConsumer", func);
   return exports;
@@ -163,13 +167,13 @@ Napi::Value RocketMQPushConsumer::SetSessionCredentials(
 class ConsumerStartWorker : public Napi::AsyncWorker {
  public:
   ConsumerStartWorker(const Napi::Function& callback,
-                      const rocketmq::DefaultMQPushConsumer& consumer)
+                      rocketmq::DefaultMQPushConsumer* consumer)
       : Napi::AsyncWorker(callback), consumer_(consumer) {}
 
-  void Execute() override { consumer_.start(); }
+  void Execute() override { consumer_->start(); }
 
  private:
-  rocketmq::DefaultMQPushConsumer consumer_;
+  rocketmq::DefaultMQPushConsumer* consumer_;
 };
 
 Napi::Value RocketMQPushConsumer::Start(const Napi::CallbackInfo& info) {
@@ -184,7 +188,7 @@ Napi::Value RocketMQPushConsumer::Start(const Napi::CallbackInfo& info) {
   Napi::Function callback = info[0].As<Napi::Function>();
 
   // AsyncWorker is automatically deleted after execution
-  auto* worker = new ConsumerStartWorker(callback, consumer_);
+  auto* worker = new ConsumerStartWorker(callback, &consumer_);
   worker->Queue();
   return env.Undefined();
 }
@@ -192,13 +196,13 @@ Napi::Value RocketMQPushConsumer::Start(const Napi::CallbackInfo& info) {
 class ConsumerShutdownWorker : public Napi::AsyncWorker {
  public:
   ConsumerShutdownWorker(const Napi::Function& callback,
-                         const rocketmq::DefaultMQPushConsumer& consumer)
+                         rocketmq::DefaultMQPushConsumer* consumer)
       : Napi::AsyncWorker(callback), consumer_(consumer) {}
 
-  void Execute() override { consumer_.shutdown(); }
+  void Execute() override { consumer_->shutdown(); }
 
  private:
-  rocketmq::DefaultMQPushConsumer consumer_;
+  rocketmq::DefaultMQPushConsumer* consumer_;
 };
 
 Napi::Value RocketMQPushConsumer::Shutdown(const Napi::CallbackInfo& info) {
@@ -213,7 +217,7 @@ Napi::Value RocketMQPushConsumer::Shutdown(const Napi::CallbackInfo& info) {
   Napi::Function callback = info[0].As<Napi::Function>();
 
   // AsyncWorker is automatically deleted after execution
-  auto* worker = new ConsumerShutdownWorker(callback, consumer_);
+  auto* worker = new ConsumerShutdownWorker(callback, &consumer_);
   worker->Queue();
   return env.Undefined();
 }
@@ -254,17 +258,14 @@ void CallConsumerMessageJsListener(Napi::Env env,
                                    Napi::Function listener,
                                    std::nullptr_t*,
                                    MessageAndPromise* data) {
-  // Ensure data is valid
   if (data == nullptr) {
     return;
   }
 
-  // Handle case where env or listener is null
   if (env == nullptr || listener == nullptr) {
     try {
       data->promise.set_value(false);
     } catch (const std::future_error&) {
-      // ignore
     }
     return;
   }
@@ -279,14 +280,12 @@ void CallConsumerMessageJsListener(Napi::Env env,
 
     Napi::Object ack = ConsumerAck::NewInstance(env);
     if (ack.IsEmpty()) {
-      // Failed to create ack object
       data->promise.set_value(false);
       return;
     }
 
     ConsumerAck* consumer_ack = Napi::ObjectWrap<ConsumerAck>::Unwrap(ack);
     if (consumer_ack == nullptr) {
-      // Failed to unwrap ack object
       data->promise.set_value(false);
       return;
     }
@@ -299,15 +298,12 @@ void CallConsumerMessageJsListener(Napi::Env env,
       try {
         consumer_ack->Done(std::current_exception());
       } catch (const std::future_error&) {
-        // ignore
       }
     }
   } catch (const std::exception&) {
-    // If anything fails, set promise to false
     try {
       data->promise.set_value(false);
     } catch (const std::future_error&) {
-      // ignore
     }
   }
 }
@@ -325,14 +321,22 @@ class ConsumerMessageListener : public rocketmq::MessageListenerConcurrently {
     for (auto& msg : msgs) {
       MessageAndPromise data{msg, std::promise<bool>()};
       auto future = data.promise.get_future();
-      listener_.BlockingCall(&data);
+
+      napi_status status = listener_.BlockingCall(&data);
+      if (status != napi_ok) {
+        return rocketmq::ConsumeStatus::RECONSUME_LATER;
+      }
+
       try {
+        if (future.wait_for(std::chrono::seconds(30)) == std::future_status::timeout) {
+          return rocketmq::ConsumeStatus::RECONSUME_LATER;
+        }
         if (!future.get()) {
           return rocketmq::ConsumeStatus::RECONSUME_LATER;
         }
-      } catch (const std::future_error& e) {
-        // ignore
-      } catch (const std::exception& e) {
+      } catch (const std::future_error&) {
+        return rocketmq::ConsumeStatus::RECONSUME_LATER;
+      } catch (const std::exception&) {
         return rocketmq::ConsumeStatus::RECONSUME_LATER;
       }
     }

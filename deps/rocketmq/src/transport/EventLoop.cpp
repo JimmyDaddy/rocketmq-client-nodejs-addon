@@ -207,9 +207,20 @@ int BufferEvent::connect(const std::string& addr) {
   }
 
   try {
-    auto* sa = StringToSockaddr(addr);  // resolve domain
-    peer_addr_port_ = SockaddrToString(sa);
-    return bufferevent_socket_connect(buffer_event_, sa, SockaddrSize(sa));
+    LOG_DEBUG_NEW("Attempting to connect to: {}", addr);
+    peer_addr_ = StringToSockaddr(addr);  // resolve domain and store in member variable
+    if (!peer_addr_) {
+      LOG_ERROR_NEW("StringToSockaddr returned nullptr for address: {}", addr);
+      return -1;
+    }
+    const sockaddr* raw = GetSockaddrPtr(peer_addr_);
+    if (!raw) {
+      LOG_ERROR_NEW("GetSockaddrPtr returned nullptr for address: {}", addr);
+      return -1;
+    }
+    peer_addr_port_ = SockaddrToString(raw);
+    LOG_DEBUG_NEW("Connecting to resolved address: {}", peer_addr_port_);
+    return bufferevent_socket_connect(buffer_event_, raw, SockaddrSize(raw));
   } catch (const std::exception& e) {
     LOG_ERROR_NEW("can not connect to {}, {}", addr, e.what());
     return -1;

@@ -35,7 +35,8 @@ MessageClientIDSetter::MessageClientIDSetter() {
   std::srand((uint32_t)std::time(NULL));
 
   std::unique_ptr<ByteBuffer> buffer;
-  sockaddr* addr = GetSelfIP();
+  auto self_ip = GetSelfIP();
+  const sockaddr* addr = GetSockaddrPtr(self_ip);
   if (addr != nullptr) {
     buffer.reset(ByteBuffer::allocate(SockaddrSize(addr) + 2 + 4));
     if (addr->sa_family == AF_INET) {

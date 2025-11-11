@@ -66,12 +66,12 @@ MessageId MessageDecoder::decodeMessageId(const std::string& msgId) {
   std::string port = msgId.substr(ip_length, 8);
   uint32_t portInt = std::stoul(port, nullptr, 16);
 
-  auto* sin = IPPortToSockaddr(byteArray, portInt);
+  auto sin = IPPortToSockaddr(byteArray, static_cast<uint16_t>(portInt));
 
   std::string offset = msgId.substr(ip_length + 8);
   uint64_t offsetInt = std::stoull(offset, nullptr, 16);
 
-  return MessageId(sin, offsetInt);
+  return MessageId(GetSockaddrPtr(sin), offsetInt);
 }
 
 MessageExtPtr MessageDecoder::clientDecode(ByteBuffer& byteBuffer, bool readBody) {
@@ -129,7 +129,7 @@ MessageExtPtr MessageDecoder::decode(ByteBuffer& byteBuffer, bool readBody, bool
   ByteArray bornHost(bornHostLength);
   byteBuffer.get(bornHost, 0, bornHostLength);
   int32_t bornPort = byteBuffer.getInt();
-  msgExt->set_born_host(IPPortToSockaddr(bornHost, bornPort));
+  msgExt->set_born_host(GetSockaddrPtr(IPPortToSockaddr(bornHost, static_cast<uint16_t>(bornPort))));
 
   // 11 STORETIMESTAMP
   int64_t storeTimestamp = byteBuffer.getLong();
@@ -140,7 +140,7 @@ MessageExtPtr MessageDecoder::decode(ByteBuffer& byteBuffer, bool readBody, bool
   ByteArray storeHost(bornHostLength);
   byteBuffer.get(storeHost, 0, storehostIPLength);
   int32_t storePort = byteBuffer.getInt();
-  msgExt->set_store_host(IPPortToSockaddr(storeHost, storePort));
+  msgExt->set_store_host(GetSockaddrPtr(IPPortToSockaddr(storeHost, static_cast<uint16_t>(storePort))));
 
   // 13 RECONSUMETIMES
   int32_t reconsumeTimes = byteBuffer.getInt();

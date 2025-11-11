@@ -28,11 +28,13 @@ using testing::Return;
 using rocketmq::MessageId;
 
 TEST(MessageIdTest, MessageId) {
-  MessageId msgId(rocketmq::StringToSockaddr("127.0.0.1:10091"), 1024);
+  auto addr = rocketmq::StringToSockaddr("127.0.0.1:10091");
+  MessageId msgId(rocketmq::GetSockaddrPtr(addr), 1024);
   EXPECT_EQ(rocketmq::SockaddrToString(msgId.getAddress()), "127.0.0.1:10091");
   EXPECT_EQ(msgId.getOffset(), 1024);
 
-  msgId.setAddress(rocketmq::StringToSockaddr("127.0.0.2:10092"));
+  auto addr2 = rocketmq::StringToSockaddr("127.0.0.2:10092");
+  msgId.setAddress(rocketmq::GetSockaddrPtr(addr2));
   EXPECT_EQ(rocketmq::SockaddrToString(msgId.getAddress()), "127.0.0.2:10092");
 
   msgId.setOffset(2048);

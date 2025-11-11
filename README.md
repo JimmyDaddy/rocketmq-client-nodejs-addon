@@ -10,7 +10,7 @@ npm install rocketmq-nodejs
 
 ## Prerequisites
 
-- Node.js >= 12.0.0
+- Node.js 18.17.0+ / 20.3.0+ / 22.14.0+
 
 ## Usage
 

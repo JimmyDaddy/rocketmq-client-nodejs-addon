@@ -89,16 +89,18 @@ TEST(MessageExtTest, MessageClientExtImpl) {
   messageClientExt.set_store_timestamp(2222);
   EXPECT_EQ(messageClientExt.store_timestamp(), 2222);
 
-  messageClientExt.set_born_host(rocketmq::StringToSockaddr("127.0.0.1:10091"));
+  messageClientExt.set_born_host(rocketmq::GetSockaddrPtr(rocketmq::StringToSockaddr("127.0.0.1:10091")));
   EXPECT_EQ(messageClientExt.born_host_string(), "127.0.0.1:10091");
 
-  messageClientExt.set_store_host(rocketmq::StringToSockaddr("127.0.0.2:10092"));
+  messageClientExt.set_store_host(rocketmq::GetSockaddrPtr(rocketmq::StringToSockaddr("127.0.0.2:10092")));
   EXPECT_EQ(messageClientExt.store_host_string(), "127.0.0.2:10092");
 }
 
 TEST(MessageExtTest, MessageExt) {
-  auto bronHost = rocketmq::SockaddrToStorage(rocketmq::StringToSockaddr("127.0.0.1:10091"));
-  auto storeHost = rocketmq::SockaddrToStorage(rocketmq::StringToSockaddr("127.0.0.2:10092"));
+  auto bronSockaddr = rocketmq::StringToSockaddr("127.0.0.1:10091");
+  auto storeSockaddr = rocketmq::StringToSockaddr("127.0.0.2:10092");
+  auto bronHost = rocketmq::SockaddrToStorage(rocketmq::GetSockaddrPtr(bronSockaddr));
+  auto storeHost = rocketmq::SockaddrToStorage(rocketmq::GetSockaddrPtr(storeSockaddr));
 
   MQMessageExt messageExt(2, 1024, reinterpret_cast<sockaddr*>(bronHost.get()), 2048,
                           reinterpret_cast<sockaddr*>(storeHost.get()), "msgId");

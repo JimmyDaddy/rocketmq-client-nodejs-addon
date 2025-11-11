@@ -20,6 +20,10 @@
 
 namespace __node_rocketmq__ {
 
+static void DeleteFunctionReference(Napi::Env, Napi::FunctionReference* data) {
+  delete data;
+}
+
 Napi::Object ConsumerAck::Init(Napi::Env env, Napi::Object exports) {
   Napi::Function func = DefineClass(
       env, "ConsumerAck", {InstanceMethod<&ConsumerAck::Done>("done")});
@@ -27,7 +31,7 @@ Napi::Object ConsumerAck::Init(Napi::Env env, Napi::Object exports) {
   // Store the constructor in env to avoid memory leak
   Napi::FunctionReference* constructor = new Napi::FunctionReference();
   *constructor = Napi::Persistent(func);
-  env.SetInstanceData<Napi::FunctionReference>(constructor);
+  env.SetInstanceData<Napi::FunctionReference, DeleteFunctionReference>(constructor);
 
   exports.Set("ConsumerAck", func);
   return exports;

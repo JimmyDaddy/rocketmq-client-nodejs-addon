@@ -30,6 +30,10 @@
 
 namespace __node_rocketmq__ {
 
+static void DeleteFunctionReference(Napi::Env, Napi::FunctionReference* data) {
+  delete data;
+}
+
 Napi::Object RocketMQProducer::Init(Napi::Env env, Napi::Object exports) {
   Napi::Function func =
       DefineClass(env,
@@ -44,7 +48,7 @@ Napi::Object RocketMQProducer::Init(Napi::Env env, Napi::Object exports) {
 
   Napi::FunctionReference* constructor = new Napi::FunctionReference();
   *constructor = Napi::Persistent(func);
-  env.SetInstanceData<Napi::FunctionReference>(constructor);
+  env.SetInstanceData<Napi::FunctionReference, DeleteFunctionReference>(constructor);
 
   exports.Set("Producer", func);
   return exports;
@@ -162,13 +166,13 @@ Napi::Value RocketMQProducer::SetSessionCredentials(
 class ProducerStartWorker : public Napi::AsyncWorker {
  public:
   ProducerStartWorker(const Napi::Function& callback,
-                      const rocketmq::DefaultMQProducer& producer)
+                      rocketmq::DefaultMQProducer* producer)
       : Napi::AsyncWorker(callback), producer_(producer) {}
 
-  void Execute() override { producer_.start(); }
+  void Execute() override { producer_->start(); }
 
  private:
-  rocketmq::DefaultMQProducer producer_;
+  rocketmq::DefaultMQProducer* producer_;
 };
 
 Napi::Value RocketMQProducer::Start(const Napi::CallbackInfo& info) {
@@ -183,7 +187,7 @@ Napi::Value RocketMQProducer::Start(const Napi::CallbackInfo& info) {
   Napi::Function callback = info[0].As<Napi::Function>();
 
   // AsyncWorker is automatically deleted after execution
-  auto* worker = new ProducerStartWorker(callback, producer_);
+  auto* worker = new ProducerStartWorker(callback, &producer_);
   worker->Queue();
   return env.Undefined();
 }
@@ -191,13 +195,13 @@ Napi::Value RocketMQProducer::Start(const Napi::CallbackInfo& info) {
 class ProducerShutdownWorker : public Napi::AsyncWorker {
  public:
   ProducerShutdownWorker(const Napi::Function& callback,
-                         const rocketmq::DefaultMQProducer& producer)
+                         rocketmq::DefaultMQProducer* producer)
       : Napi::AsyncWorker(callback), producer_(producer) {}
 
-  void Execute() override { producer_.shutdown(); }
+  void Execute() override { producer_->shutdown(); }
 
  private:
-  rocketmq::DefaultMQProducer producer_;
+  rocketmq::DefaultMQProducer* producer_;
 };
 
 Napi::Value RocketMQProducer::Shutdown(const Napi::CallbackInfo& info) {
@@ -212,7 +216,7 @@ Napi::Value RocketMQProducer::Shutdown(const Napi::CallbackInfo& info) {
   Napi::Function callback = info[0].As<Napi::Function>();
 
   // AsyncWorker is automatically deleted after execution
-  auto* worker = new ProducerShutdownWorker(callback, producer_);
+  auto* worker = new ProducerShutdownWorker(callback, &producer_);
   worker->Queue();
   return env.Undefined();
 }
@@ -251,45 +255,48 @@ class ProducerSendCallback : public rocketmq::AutoDeleteSendCallback {
  public:
   ProducerSendCallback(Napi::Env&& env, Napi::Function&& callback)
       : callback_(
-            Callback::New(env, callback, "RocketMQ Send Callback", 0, 1)) {}
+            Callback::New(env, callback, "RocketMQ Send Callback", 0, 1)),
+        released_(false) {}
 
-  ~ProducerSendCallback() { 
-    // Release the callback to avoid memory leaks
-    callback_.Release(); 
+  ~ProducerSendCallback() {
+    if (!released_) {
+      callback_.Release();
+      released_ = true;
+    }
   }
 
   void onSuccess(rocketmq::SendResult& send_result) override {
-    // Create a copy of the send result to pass to the callback
     auto* data =
         new ResultOrException{std::unique_ptr<rocketmq::SendResult>(
                                   new rocketmq::SendResult(send_result)),
                               nullptr};
 
-    // Call the JavaScript callback with the result
     napi_status status = callback_.BlockingCall(data);
     if (status != napi_ok) {
-      // If BlockingCall fails, clean up the data to avoid memory leak
       delete data;
-
-      // Log the error but don't terminate the process
       fprintf(stderr, "Failed to call JavaScript callback in ProducerSendCallback::onSuccess\n");
+    }
+
+    if (!released_) {
+      callback_.Release();
+      released_ = true;
     }
   }
 
   void onException(rocketmq::MQException& exception) noexcept override {
-    // Create an exception to pass to the callback
     auto* data =
         new ResultOrException{nullptr, std::make_exception_ptr(exception)};
 
-    // Call the JavaScript callback with the exception
     napi_status status = callback_.BlockingCall(data);
     if (status != napi_ok) {
-      // If BlockingCall fails, clean up the data to avoid memory leak
       delete data;
-
-      // Log the error but don't terminate the process
-      fprintf(stderr, "Failed to call JavaScript callback in ProducerSendCallback::onException: %s\n", 
+      fprintf(stderr, "Failed to call JavaScript callback in ProducerSendCallback::onException: %s\n",
               exception.what());
+    }
+
+    if (!released_) {
+      callback_.Release();
+      released_ = true;
     }
   }
 
@@ -299,6 +306,7 @@ class ProducerSendCallback : public rocketmq::AutoDeleteSendCallback {
                                                  &CallProducerSendJsCallback>;
 
   Callback callback_;
+  bool released_;
 };
 
 Napi::Value RocketMQProducer::Send(const Napi::CallbackInfo& info) {

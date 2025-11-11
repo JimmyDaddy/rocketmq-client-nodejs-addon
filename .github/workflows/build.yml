@@ -1,0 +1,102 @@
+name: Build Addons
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  linux-gnu:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake ninja-build python3 unzip curl
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Build RocketMQ native deps
+        run: ./deps/rocketmq/build.sh
+
+      - name: Build addon (glibc)
+        run: npx cmake-js compile --CDCMAKE_BUILD_TYPE=Release
+
+      - name: Package artifact
+        run: |
+          mkdir -p Release
+          cp build/rocketmq.node Release/linux-x86_64-gnu-rocketmq.node
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-x86_64-gnu
+          path: Release/linux-x86_64-gnu-rocketmq.node
+
+  linux-musl:
+    runs-on: ubuntu-latest
+    container:
+      image: node:20-alpine
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          apk add --no-cache bash build-base cmake ninja python3 curl unzip git
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Build RocketMQ native deps
+        run: ./deps/rocketmq/build.sh
+
+      - name: Build addon (musl)
+        run: npx cmake-js compile --CDCMAKE_BUILD_TYPE=Release
+
+      - name: Package artifact
+        run: |
+          mkdir -p Release
+          cp build/rocketmq.node Release/linux-x86_64-musl-rocketmq.node
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-x86_64-musl
+          path: Release/linux-x86_64-musl-rocketmq.node
+
+  macos-universal:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install build tools
+        run: brew install cmake ninja || true
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Build universal addon
+        run: ./build.sh build Darwin
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: darwin-universal
+          path: Release/darwin-universal-rocketmq.node

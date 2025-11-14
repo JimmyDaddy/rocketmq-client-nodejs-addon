@@ -137,7 +137,7 @@ MessageExtPtr MessageDecoder::decode(ByteBuffer& byteBuffer, bool readBody, bool
 
   // 12 STOREHOST
   int storehostIPLength = (sysFlag & MessageSysFlag::STOREHOST_V6_FLAG) == 0 ? kIPv4AddrSize : kIPv6AddrSize;
-  ByteArray storeHost(bornHostLength);
+  ByteArray storeHost(storehostIPLength);
   byteBuffer.get(storeHost, 0, storehostIPLength);
   int32_t storePort = byteBuffer.getInt();
   msgExt->set_store_host(GetSockaddrPtr(IPPortToSockaddr(storeHost, static_cast<uint16_t>(storePort))));
@@ -154,6 +154,15 @@ MessageExtPtr MessageDecoder::decode(ByteBuffer& byteBuffer, bool readBody, bool
   int uncompress_failed = false;
   int32_t bodyLen = byteBuffer.getInt();
   if (bodyLen > 0) {
+    if (bodyLen > byteBuffer.remaining()) {
+      LOG_ERROR_NEW("Invalid bodyLen: {} exceeds buffer size: {}", bodyLen, byteBuffer.remaining());
+      return nullptr;
+    }
+    const int32_t MAX_BODY_SIZE = 4 * 1024 * 1024;
+    if (bodyLen > MAX_BODY_SIZE) {
+      LOG_ERROR_NEW("bodyLen {} exceeds maximum allowed size {}", bodyLen, MAX_BODY_SIZE);
+      return nullptr;
+    }
     if (readBody) {
       ByteArray body(byteBuffer.array() + byteBuffer.arrayOffset() + byteBuffer.position(), bodyLen);
       byteBuffer.position(byteBuffer.position() + bodyLen);

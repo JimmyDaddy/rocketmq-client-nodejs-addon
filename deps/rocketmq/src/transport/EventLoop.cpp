@@ -68,15 +68,15 @@ EventLoop::~EventLoop() {
 }
 
 void EventLoop::start() {
-  if (!is_running_) {
-    is_running_ = true;
+  bool expected = false;
+  if (is_running_.compare_exchange_strong(expected, true)) {
     loop_thread_.start();
   }
 }
 
 void EventLoop::stop() {
-  if (is_running_) {
-    is_running_ = false;
+  bool expected = true;
+  if (is_running_.compare_exchange_strong(expected, false)) {
     loop_thread_.join();
   }
 }

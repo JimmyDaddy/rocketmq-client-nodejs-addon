@@ -63,7 +63,10 @@ RemotingCommand* ClientRemotingProcessor::processRequest(TcpTransportPtr channel
 
 RemotingCommand* ClientRemotingProcessor::checkTransactionState(const std::string& addr, RemotingCommand* request) {
   auto* requestHeader = request->decodeCommandCustomHeader<CheckTransactionStateRequestHeader>();
-  assert(requestHeader != nullptr);
+  if (requestHeader == nullptr) {
+    LOG_ERROR_NEW("Failed to decode CheckTransactionStateRequestHeader");
+    return RemotingCommand::createResponseCommand(ResponseCode::SYSTEM_ERROR, "Invalid request header");
+  }
 
   auto requestBody = request->body();
   if (requestBody != nullptr && requestBody->size() > 0) {

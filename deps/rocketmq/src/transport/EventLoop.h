@@ -21,6 +21,7 @@
 #include <event2/bufferevent.h>
 #include <event2/event.h>
 
+#include <atomic>      // std::atomic
 #include <functional>  // std::function
 #include <memory>      // std::unique_ptr
 
@@ -55,7 +56,7 @@ class EventLoop : public noncopyable {
   struct event_base* event_base_;
   thread loop_thread_;
 
-  bool is_running_;  // aotmic is unnecessary
+  std::atomic<bool> is_running_{false};
 };
 
 class TcpTransport;

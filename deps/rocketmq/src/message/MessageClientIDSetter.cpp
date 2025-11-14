@@ -70,7 +70,22 @@ void MessageClientIDSetter::setStartTime(uint64_t millis) {
   //   Although not defined, this is almost always an integral value holding the number of seconds
   //   (not counting leap seconds) since 00:00, Jan 1 1970 UTC, corresponding to POSIX time.
   std::time_t tmNow = millis / 1000;
-  std::tm* ptmNow = std::localtime(&tmNow);  // may not be thread-safe
+  std::tm tmResult;
+#ifdef WIN32
+  if (localtime_s(&tmResult, &tmNow) != 0) {
+    start_time_ = millis;
+    next_start_time_ = millis;
+    return;
+  }
+  std::tm* ptmNow = &tmResult;
+#else
+  std::tm* ptmNow = localtime_r(&tmNow, &tmResult);
+  if (ptmNow == nullptr) {
+    start_time_ = millis;
+    next_start_time_ = millis;
+    return;
+  }
+#endif
 
   std::tm curMonthBegin = {0};
   curMonthBegin.tm_year = ptmNow->tm_year;  // since 1900

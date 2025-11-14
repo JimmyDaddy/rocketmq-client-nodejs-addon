@@ -16,12 +16,14 @@
  */
 #include "SocketUtil.h"
 
-#include <cstdlib>  // std::abort
-#include <cstring>  // std::memcpy, std::memset
+#include <algorithm>  // std::all_of
+#include <cctype>     // std::isdigit
+#include <cstdlib>    // std::abort
+#include <cstring>    // std::memcpy, std::memset
 
 #include <iostream>
 #include <limits>
-#include <memory>    // std::unique_ptr
+#include <memory>     // std::unique_ptr
 #include <stdexcept>  // std::invalid_argument, std::runtime_error
 #include <string>
 
@@ -46,7 +48,7 @@ void SafeMemcpy(void* dest, size_t dest_size, const void* src, size_t src_size) 
   if (src_size > dest_size) {
     throw std::invalid_argument("source size exceeds destination buffer size");
   }
-  std::memcpy(dest, src, src_size);
+  std::memmove(dest, src, src_size);
 }
 
 std::unique_ptr<sockaddr_storage> SockaddrToStorage(const sockaddr* src) {
@@ -134,14 +136,17 @@ std::unique_ptr<sockaddr_storage> StringToSockaddr(const std::string& addr) {
   uint16_t port_num = 0;
 
   if (!port_str.empty()) {
+    if (!std::all_of(port_str.begin(), port_str.end(), [](unsigned char c) { return std::isdigit(c); })) {
+      throw std::invalid_argument("port contains non-digit characters: " + port_str);
+    }
     try {
       uint32_t n = std::stoul(port_str);
+      if (n == 0) {
+        throw std::invalid_argument("port cannot be zero");
+      }
       if (n > std::numeric_limits<uint16_t>::max()) {
         throw std::out_of_range("port is too large: " + std::to_string(n) +
                                " (max: " + std::to_string(std::numeric_limits<uint16_t>::max()) + ")");
-      }
-      if (n == 0) {
-        throw std::invalid_argument("port cannot be zero");
       }
       port_num = htons(static_cast<uint16_t>(n));
     } catch (const std::exception& e) {

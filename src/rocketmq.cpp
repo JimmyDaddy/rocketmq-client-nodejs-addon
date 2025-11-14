@@ -16,7 +16,11 @@
  */
 #include <napi.h>
 
-#if !defined(_WIN32)
+#if (defined(__GLIBC__) || defined(__APPLE__)) && !defined(_WIN32)
+#define ROCKETMQ_HAS_EXECINFO 1
+#endif
+
+#if ROCKETMQ_HAS_EXECINFO
 #include <csignal>
 #include <cstdio>
 #include <cstdlib>
@@ -31,7 +35,7 @@
 namespace __node_rocketmq__ {
 
 namespace {
-#if !defined(_WIN32)
+#if ROCKETMQ_HAS_EXECINFO
 void CrashSignalHandler(int signo) {
   void* frames[64];
   const int count = backtrace(frames, 64);
@@ -55,7 +59,7 @@ void MaybeInstallCrashHandler() {
   std::signal(SIGABRT, CrashSignalHandler);
 }
 #else
-void MaybeInstallCrashHandler() {}
+inline void MaybeInstallCrashHandler() {}
 #endif
 }
 

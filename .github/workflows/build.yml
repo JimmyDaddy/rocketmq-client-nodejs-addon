@@ -1,79 +1,36 @@
-name: Build Addons
+name: Build and Release
 
 on:
   push:
     branches:
       - master
+    tags:
+      - 'v*'
   pull_request:
+  workflow_dispatch:
+    inputs:
+      publish_npm:
+        description: 'Publish to npm'
+        required: false
+        type: boolean
+        default: false
 
 jobs:
-  linux-gnu:
-    runs-on: ubuntu-latest
+  linux-gnu-x64:
+    runs-on: ubuntu-24.04
     container:
       image: alibaba-cloud-linux-3-registry.cn-hangzhou.cr.aliyuncs.com/alinux3/alinux3:latest
     steps:
       - name: Install prerequisites
-        run: |
-          set -eux
-          yum install -y git curl wget xz tar unzip rsync which python3 python3-pip python3-setuptools autoconf automake libtool pkgconfig gcc gcc-c++ make ninja-build cmake file vim procps-ng iputils
+        run: yum install -y git curl wget xz tar unzip rsync which python3 python3-pip python3-setuptools autoconf automake libtool pkgconfig gcc gcc-c++ make ninja-build cmake file vim procps-ng iputils
 
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install Node.js via NodeSource
+      - name: Install Node.js
         run: |
-          set -eux
           curl -fsSL https://rpm.nodesource.com/setup_18.x | bash -
           yum install -y nodejs
-          node -v
-          npm -v
-
-      - name: Install npm dependencies
-        run: |
-          set -eux
-          npm install --no-audit --prefer-offline
-
-      - name: Build RocketMQ native deps
-        run: |
-          set -eux
-          ./deps/rocketmq/build.sh
-
-      - name: Build addon (glibc)
-        run: |
-          set -eux
-          npx cmake-js compile --CDCMAKE_BUILD_TYPE=Release
-
-      - name: Detect architecture
-        run: echo "arch=$(uname -m)" >> $GITHUB_OUTPUT
-        id: detect_arch
-
-      - name: Package artifact
-        run: |
-          set -eux
-          mkdir -p Release
-          cp build/rocketmq.node Release/linux-${{ steps.detect_arch.outputs.arch }}-gnu-debug-rocketmq.node
-          strip --strip-all build/rocketmq.node
-          cp build/rocketmq.node Release/linux-${{ steps.detect_arch.outputs.arch }}-gnu-rocketmq.node
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: linux-${{ steps.detect_arch.outputs.arch }}-gnu
-          path: |
-            Release/linux-${{ steps.detect_arch.outputs.arch }}-gnu-rocketmq.node
-            Release/linux-${{ steps.detect_arch.outputs.arch }}-gnu-debug-rocketmq.node
-
-  linux-musl:
-    runs-on: ubuntu-latest
-    container:
-      image: alpine:latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Install system dependencies
-        run: |
-          apk add --no-cache nodejs npm bash build-base cmake ninja python3 curl unzip git autoconf automake libtool pkgconfig ninja-build
 
       - name: Install npm dependencies
         run: npm install --no-audit --prefer-offline
@@ -81,27 +38,121 @@ jobs:
       - name: Build RocketMQ native deps
         run: ./deps/rocketmq/build.sh
 
-      - name: Build addon (musl)
+      - name: Build addon
         run: npx cmake-js compile --CDCMAKE_BUILD_TYPE=Release
-
-      - name: Detect architecture
-        run: echo "arch=$(uname -m)" >> $GITHUB_OUTPUT
-        id: detect_arch
 
       - name: Package artifact
         run: |
           mkdir -p Release
-          cp build/rocketmq.node Release/linux-${{ steps.detect_arch.outputs.arch }}-musl-debug-rocketmq.node
           strip --strip-all build/rocketmq.node
-          cp build/rocketmq.node Release/linux-${{ steps.detect_arch.outputs.arch }}-musl-rocketmq.node
+          cp build/rocketmq.node Release/linux-x86_64-gnu-rocketmq.node
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: linux-${{ steps.detect_arch.outputs.arch }}-musl
-          path: |
-            Release/linux-${{ steps.detect_arch.outputs.arch }}-musl-rocketmq.node
-            Release/linux-${{ steps.detect_arch.outputs.arch }}-musl-debug-rocketmq.node
+          name: linux-x86_64-gnu
+          path: Release/linux-x86_64-gnu-rocketmq.node
+
+  linux-gnu-arm64:
+    runs-on: ubuntu-24.04-arm
+    container:
+      image: alibaba-cloud-linux-3-registry.cn-hangzhou.cr.aliyuncs.com/alinux3/alinux3:latest
+    steps:
+      - name: Install prerequisites
+        run: yum install -y git curl wget xz tar unzip rsync which python3 python3-pip python3-setuptools autoconf automake libtool pkgconfig gcc gcc-c++ make ninja-build cmake file vim procps-ng iputils
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Node.js
+        run: |
+          curl -fsSL https://rpm.nodesource.com/setup_18.x | bash -
+          yum install -y nodejs
+
+      - name: Install npm dependencies
+        run: npm install --no-audit --prefer-offline
+
+      - name: Build RocketMQ native deps
+        run: ./deps/rocketmq/build.sh
+
+      - name: Build addon
+        run: npx cmake-js compile --CDCMAKE_BUILD_TYPE=Release
+
+      - name: Package artifact
+        run: |
+          mkdir -p Release
+          strip --strip-all build/rocketmq.node
+          cp build/rocketmq.node Release/linux-aarch64-gnu-rocketmq.node
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-aarch64-gnu
+          path: Release/linux-aarch64-gnu-rocketmq.node
+
+  linux-musl-x64:
+    runs-on: ubuntu-24.04
+    container:
+      image: alpine:latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: apk add --no-cache nodejs npm bash build-base cmake ninja python3 curl unzip git autoconf automake libtool pkgconfig
+
+      - name: Install npm dependencies
+        run: npm install --no-audit --prefer-offline
+
+      - name: Build RocketMQ native deps
+        run: ./deps/rocketmq/build.sh
+
+      - name: Build addon
+        run: npx cmake-js compile --CDCMAKE_BUILD_TYPE=Release
+
+      - name: Package artifact
+        run: |
+          mkdir -p Release
+          strip --strip-all build/rocketmq.node
+          cp build/rocketmq.node Release/linux-x86_64-musl-rocketmq.node
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-x86_64-musl
+          path: Release/linux-x86_64-musl-rocketmq.node
+
+  linux-musl-arm64:
+    runs-on: ubuntu-24.04-arm
+    container:
+      image: alpine:latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: apk add --no-cache nodejs npm bash build-base cmake ninja python3 curl unzip git autoconf automake libtool pkgconfig
+
+      - name: Install npm dependencies
+        run: npm install --no-audit --prefer-offline
+
+      - name: Build RocketMQ native deps
+        run: ./deps/rocketmq/build.sh
+
+      - name: Build addon
+        run: npx cmake-js compile --CDCMAKE_BUILD_TYPE=Release
+
+      - name: Package artifact
+        run: |
+          mkdir -p Release
+          strip --strip-all build/rocketmq.node
+          cp build/rocketmq.node Release/linux-aarch64-musl-rocketmq.node
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-aarch64-musl
+          path: Release/linux-aarch64-musl-rocketmq.node
 
   macos-universal:
     runs-on: macos-latest
@@ -123,7 +174,7 @@ jobs:
       - name: Build RocketMQ native deps
         run: ./deps/rocketmq/build.sh
 
-      - name: Build addon (Darwin universal)
+      - name: Build addon
         run: |
           npx cmake-js compile --CDCMAKE_BUILD_TYPE=Release \
             --CDCMAKE_OSX_ARCHITECTURES="arm64;x86_64" \
@@ -133,7 +184,6 @@ jobs:
       - name: Package artifact
         run: |
           mkdir -p Release
-          cp build/rocketmq.node Release/darwin-universal-debug-rocketmq.node
           strip -S -x build/rocketmq.node
           cp build/rocketmq.node Release/darwin-universal-rocketmq.node
 
@@ -141,6 +191,66 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: darwin-universal
-          path: |
-            Release/darwin-universal-rocketmq.node
-            Release/darwin-universal-debug-rocketmq.node
+          path: Release/darwin-universal-rocketmq.node
+
+  release:
+    needs: [linux-gnu-x64, linux-gnu-arm64, linux-musl-x64, linux-musl-arm64, macos-universal]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && (startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/master')
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Prepare Release directory
+        run: |
+          mkdir -p Release
+          find artifacts -name "*.node" -exec cp {} Release/ \;
+          ls -lh Release/
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || format('build-{0}', github.sha) }}
+          name: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || format('Build {0}', github.sha) }}
+          draft: false
+          prerelease: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+          files: Release/*.node
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  publish-npm:
+    needs: release
+    runs-on: ubuntu-latest
+    if: (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')) || (github.event_name == 'workflow_dispatch' && inputs.publish_npm)
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Prepare Release directory
+        run: |
+          mkdir -p Release
+          find artifacts -name "*.node" -exec cp {} Release/ \;
+          ls -lh Release/
+
+      - name: Publish to npm
+        run: npm publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

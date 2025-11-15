@@ -18,6 +18,7 @@
 
 #include <cassert>
 
+#include "MQException.h"
 #include "MQProtos.h"
 #include "MessageAccessor.hpp"
 #include "MessageDecoder.h"
@@ -28,6 +29,25 @@
 #include "protocol/body/ResetOffsetBody.hpp"
 #include "protocol/header/CommandHeader.h"
 #include "protocol/header/ReplyMessageRequestHeader.hpp"
+
+namespace {
+
+void completeFutureOnFailure(const std::string& correlationId, const std::string& errorMessage) {
+  if (correlationId.empty()) {
+    return;
+  }
+
+  auto requestResponseFuture = rocketmq::RequestFutureTable::removeRequestFuture(correlationId);
+  if (requestResponseFuture != nullptr) {
+    requestResponseFuture->set_send_request_ok(false);
+    requestResponseFuture->set_cause(
+        std::make_exception_ptr(NEW_MQEXCEPTION(rocketmq::MQClientException, errorMessage, -1)));
+    requestResponseFuture->putResponseMessage(nullptr);
+    requestResponseFuture->executeRequestCallback();
+  }
+}
+
+}  // namespace
 
 namespace rocketmq {
 
@@ -100,6 +120,10 @@ RemotingCommand* ClientRemotingProcessor::checkTransactionState(const std::strin
 
 RemotingCommand* ClientRemotingProcessor::notifyConsumerIdsChanged(RemotingCommand* request) {
   auto* requestHeader = request->decodeCommandCustomHeader<NotifyConsumerIdsChangedRequestHeader>();
+  if (requestHeader == nullptr) {
+    LOG_WARN_NEW("notifyConsumerIdsChanged, decode header failed");
+    return nullptr;
+  }
   LOG_INFO_NEW("notifyConsumerIdsChanged, group:{}", requestHeader->getConsumerGroup());
   client_instance_->rebalanceImmediately();
   return nullptr;
@@ -125,6 +149,10 @@ RemotingCommand* ClientRemotingProcessor::resetOffset(RemotingCommand* request) 
 
 RemotingCommand* ClientRemotingProcessor::getConsumerRunningInfo(const std::string& addr, RemotingCommand* request) {
   auto* requestHeader = request->decodeCommandCustomHeader<GetConsumerRunningInfoRequestHeader>();
+  if (requestHeader == nullptr) {
+    LOG_WARN_NEW("getConsumerRunningInfo, decode header failed");
+    return new RemotingCommand(MQResponseCode::SYSTEM_ERROR, "decode header failed");
+  }
   LOG_INFO_NEW("getConsumerRunningInfo, group:{}", requestHeader->getConsumerGroup());
 
   std::unique_ptr<RemotingCommand> response(
@@ -160,6 +188,10 @@ RemotingCommand* ClientRemotingProcessor::receiveReplyMessage(RemotingCommand* r
     return response.release();
   }
 
+  auto properties = MessageDecoder::string2messageProperties(requestHeader->properties());
+  const auto correlationIter = properties.find(MQMessageConst::PROPERTY_CORRELATION_ID);
+  const std::string correlationId = correlationIter != properties.end() ? correlationIter->second : "";
+
   try {
     std::unique_ptr<MQMessageExt> msg(new MQMessageExt);
 
@@ -182,6 +214,7 @@ RemotingCommand* ClientRemotingProcessor::receiveReplyMessage(RemotingCommand* r
       LOG_WARN_NEW("receive reply message without body");
       response->set_code(MQResponseCode::SYSTEM_ERROR);
       response->set_remark("reply message body is empty");
+      completeFutureOnFailure(correlationId, "reply message body is empty");
       return response.release();
     }
 
@@ -193,6 +226,7 @@ RemotingCommand* ClientRemotingProcessor::receiveReplyMessage(RemotingCommand* r
         LOG_WARN_NEW("failed to uncompress reply message body");
         response->set_code(MQResponseCode::SYSTEM_ERROR);
         response->set_remark("failed to uncompress reply message body");
+        completeFutureOnFailure(correlationId, "failed to uncompress reply message body");
         return response.release();
       }
     } else {
@@ -200,7 +234,7 @@ RemotingCommand* ClientRemotingProcessor::receiveReplyMessage(RemotingCommand* r
     }
 
     msg->set_flag(requestHeader->flag());
-    MessageAccessor::setProperties(*msg, MessageDecoder::string2messageProperties(requestHeader->properties()));
+    MessageAccessor::setProperties(*msg, std::move(properties));
     MessageAccessor::putProperty(*msg, MQMessageConst::PROPERTY_REPLY_MESSAGE_ARRIVE_TIME,
                                  UtilAll::to_string(receiveTime));
     msg->set_born_timestamp(requestHeader->born_timestamp());
@@ -215,6 +249,7 @@ RemotingCommand* ClientRemotingProcessor::receiveReplyMessage(RemotingCommand* r
     LOG_WARN_NEW("unknown err when receiveReplyMsg, {}", e.what());
     response->set_code(MQResponseCode::SYSTEM_ERROR);
     response->set_remark("process reply message fail");
+    completeFutureOnFailure(correlationId, e.what());
   }
 
   return response.release();

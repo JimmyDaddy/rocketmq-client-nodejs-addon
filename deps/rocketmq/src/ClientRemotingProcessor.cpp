@@ -168,6 +168,13 @@ RemotingCommand* ClientRemotingProcessor::receiveReplyMessage(RemotingCommand* r
     }
 
     auto body = request->body();
+    if (body == nullptr) {
+      LOG_WARN_NEW("receive reply message without body");
+      response->set_code(MQResponseCode::SYSTEM_ERROR);
+      response->set_remark("reply message body is empty");
+      return response.release();
+    }
+
     if ((requestHeader->sys_flag() & MessageSysFlag::COMPRESSED_FLAG) == MessageSysFlag::COMPRESSED_FLAG) {
       std::string origin_body;
       if (UtilAll::inflate(*body, origin_body)) {

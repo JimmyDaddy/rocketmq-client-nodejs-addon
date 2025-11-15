@@ -221,10 +221,11 @@ std::unique_ptr<RemotingCommand> TcpRemotingClient::invokeSync(const std::string
     try {
       doBeforeRpcHooks(addr, request, true);
       auto costTime = UtilAll::currentTimeMillis() - beginStartTime;
-      if (timeoutMillis <= 0 || timeoutMillis < costTime) {
+      if (timeoutMillis <= 0 || timeoutMillis <= costTime) {
         THROW_MQEXCEPTION(RemotingTimeoutException, "invokeSync call timeout", -1);
       }
-      std::unique_ptr<RemotingCommand> response(invokeSyncImpl(channel, request, timeoutMillis));
+      auto remainTimeoutMillis = timeoutMillis - costTime;
+      std::unique_ptr<RemotingCommand> response(invokeSyncImpl(channel, request, remainTimeoutMillis));
       doAfterRpcHooks(addr, request, response.get(), false);
       return response;
     } catch (const RemotingSendRequestException& e) {
@@ -636,7 +637,9 @@ void TcpRemotingClient::processRequestCommand(std::unique_ptr<RemotingCommand> r
 
       doBeforeRpcHooks(channel->getPeerAddrAndPort(), *requestCommand, false);
       response.reset(processor->processRequest(channel, requestCommand.get()));
-      doAfterRpcHooks(channel->getPeerAddrAndPort(), *response, response.get(), true);
+      if (response != nullptr) {
+        doAfterRpcHooks(channel->getPeerAddrAndPort(), *response, response.get(), true);
+      }
     } catch (std::exception& e) {
       LOG_ERROR_NEW("process request exception. {}", e.what());
 

@@ -185,15 +185,24 @@ MessageExtPtr MessageDecoder::decode(ByteBuffer& byteBuffer, bool readBody, bool
   }
 
   // 16 TOPIC
-  int8_t topicLen = byteBuffer.get();
+  int8_t topicLenRaw = byteBuffer.get();
+  int topicLen = static_cast<uint8_t>(topicLenRaw);
+  if (topicLen > byteBuffer.remaining()) {
+    LOG_ERROR_NEW("Invalid topic length:{}, remain: {}", topicLen, byteBuffer.remaining());
+    return nullptr;
+  }
   ByteArray topic(topicLen);
   byteBuffer.get(topic);
   msgExt->set_topic(topic.array(), topic.size());
 
   // 17 properties
-  int16_t propertiesLen = byteBuffer.getShort();
-  if (propertiesLen > 0) {
-    ByteArray properties(propertiesLen);
+  int16_t propertiesLenRaw = byteBuffer.getShort();
+  if (propertiesLenRaw < 0 || propertiesLenRaw > byteBuffer.remaining()) {
+    LOG_ERROR_NEW("Invalid properties length:{}, remain:{}", propertiesLenRaw, byteBuffer.remaining());
+    return nullptr;
+  }
+  if (propertiesLenRaw > 0) {
+    ByteArray properties(propertiesLenRaw);
     byteBuffer.get(properties);
     std::string propertiesString(properties.array(), properties.size());
     std::map<std::string, std::string> propertiesMap = string2messageProperties(propertiesString);

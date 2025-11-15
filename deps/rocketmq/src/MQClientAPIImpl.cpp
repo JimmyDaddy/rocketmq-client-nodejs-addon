@@ -625,7 +625,7 @@ void MQClientAPIImpl::unlockBatchMQ(const std::string& addr,
 TopicRouteData* MQClientAPIImpl::getTopicRouteInfoFromNameServer(const std::string& topic, int timeoutMillis) {
   RemotingCommand request(GET_ROUTEINFO_BY_TOPIC, new GetRouteInfoRequestHeader(topic));
 
-  std::unique_ptr<RemotingCommand> response(remoting_client_->invokeSync(null, request, timeoutMillis));
+  std::unique_ptr<RemotingCommand> response(remoting_client_->invokeSync("", request, timeoutMillis));
   assert(response != nullptr);
   switch (response->code()) {
     case SUCCESS: {
@@ -645,7 +645,7 @@ TopicRouteData* MQClientAPIImpl::getTopicRouteInfoFromNameServer(const std::stri
 TopicList* MQClientAPIImpl::getTopicListFromNameServer() {
   RemotingCommand request(GET_ALL_TOPIC_LIST_FROM_NAMESERVER, nullptr);
 
-  std::unique_ptr<RemotingCommand> response(remoting_client_->invokeSync(null, request));
+  std::unique_ptr<RemotingCommand> response(remoting_client_->invokeSync("", request));
   assert(response != nullptr);
   switch (response->code()) {
     case SUCCESS: {

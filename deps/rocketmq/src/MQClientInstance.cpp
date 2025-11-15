@@ -547,7 +547,7 @@ bool MQClientInstance::registerConsumer(const std::string& group, MQConsumerInne
 
 void MQClientInstance::unregisterConsumer(const std::string& group) {
   eraseConsumerFromTable(group);
-  unregisterClientWithLock(null, group);
+  unregisterClientWithLock("", group);
 }
 
 void MQClientInstance::unregisterClientWithLock(const std::string& producerGroup, const std::string& consumerGroup) {
@@ -599,7 +599,7 @@ bool MQClientInstance::registerProducer(const std::string& group, MQProducerInne
 
 void MQClientInstance::unregisterProducer(const std::string& group) {
   eraseProducerFromTable(group);
-  unregisterClientWithLock(group, null);
+  unregisterClientWithLock(group, "");
 }
 
 void MQClientInstance::rebalanceImmediately() {
@@ -814,7 +814,7 @@ std::string MQClientInstance::findBrokerAddressInPublish(const std::string& brok
     return brokerAddr;
   }
 
-  return null;
+  return std::string();
 }
 
 FindBrokerResult* MQClientInstance::findBrokerAddressInSubscribe(const std::string& brokerName,

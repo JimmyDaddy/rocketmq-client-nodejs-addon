@@ -103,7 +103,19 @@ int64_t LocalFileOffsetStore::readOffset(const MQMessageQueue& mq, ReadOffsetTyp
   return -1;
 }
 
-void LocalFileOffsetStore::persist(const MQMessageQueue& mq) {}
+void LocalFileOffsetStore::persist(const MQMessageQueue& mq) {
+  std::map<MQMessageQueue, int64_t> snapshot;
+  {
+    std::lock_guard<std::mutex> lock(lock_);
+    const auto& it = offset_table_.find(mq);
+    if (it == offset_table_.end()) {
+      return;
+    }
+    snapshot = offset_table_;
+  }
+
+  persistOffsets(snapshot);
+}
 
 void LocalFileOffsetStore::persistAll(std::vector<MQMessageQueue>& mqs) {
   if (mqs.empty()) {
@@ -116,25 +128,55 @@ void LocalFileOffsetStore::persistAll(std::vector<MQMessageQueue>& mqs) {
     offsetTable = offset_table_;
   }
 
-  Json::Value root(Json::objectValue);
-  Json::Value jOffsetTable(Json::objectValue);
+  std::map<MQMessageQueue, int64_t> offsetsToPersist;
   for (const auto& mq : mqs) {
     const auto& it = offsetTable.find(mq);
     if (it != offsetTable.end()) {
-      std::string strMQ = RemotingSerializable::toJson(toJson(mq));
-      jOffsetTable[strMQ] = Json::Value((Json::Int64)it->second);
+      offsetsToPersist.emplace(it->first, it->second);
     }
+  }
+
+  if (!offsetsToPersist.empty()) {
+    persistOffsets(offsetsToPersist);
+  }
+}
+
+void LocalFileOffsetStore::removeOffset(const MQMessageQueue& mq) {
+  bool removed = false;
+  {
+    std::lock_guard<std::mutex> lock(lock_);
+    removed = offset_table_.erase(mq) > 0;
+  }
+
+  if (!removed) {
+    return;
+  }
+
+  std::map<MQMessageQueue, int64_t> snapshot;
+  {
+    std::lock_guard<std::mutex> lock(lock_);
+    snapshot = offset_table_;
+  }
+  persistOffsets(snapshot);
+}
+
+void LocalFileOffsetStore::persistOffsets(const std::map<MQMessageQueue, int64_t>& offsets) {
+  Json::Value root(Json::objectValue);
+  Json::Value jOffsetTable(Json::objectValue);
+  for (const auto& entry : offsets) {
+    std::string strMQ = RemotingSerializable::toJson(toJson(entry.first));
+    jOffsetTable[strMQ] = Json::Value(static_cast<Json::Int64>(entry.second));
   }
   root["offsetTable"] = jOffsetTable;
 
-  std::lock_guard<std::mutex> lock2(file_mutex_);
+  std::lock_guard<std::mutex> lock(file_mutex_);
   std::string storePathTmp = store_path_ + ".tmp";
   std::ofstream ofstrm(storePathTmp, std::ios::binary | std::ios::out);
   if (ofstrm.is_open()) {
     try {
       RemotingSerializable::toJson(root, ofstrm, true);
-    } catch (std::exception& e) {
-      THROW_MQEXCEPTION(MQClientException, "persistAll failed", -1);
+    } catch (const std::exception& e) {
+      THROW_MQEXCEPTION(MQClientException, "persist offsets failed", -1);
     }
 
     if (!UtilAll::ReplaceFile(store_path_, store_path_ + ".bak") || !UtilAll::ReplaceFile(storePathTmp, store_path_)) {
@@ -142,8 +184,6 @@ void LocalFileOffsetStore::persistAll(std::vector<MQMessageQueue>& mqs) {
     }
   }
 }
-
-void LocalFileOffsetStore::removeOffset(const MQMessageQueue& mq) {}
 
 std::map<MQMessageQueue, int64_t> LocalFileOffsetStore::readLocalOffset() {
   std::lock_guard<std::mutex> lock(file_mutex_);

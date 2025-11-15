@@ -529,7 +529,7 @@ void DefaultMQPushConsumerImpl::resetRetryAndNamespace(const std::vector<Message
 }
 
 bool DefaultMQPushConsumerImpl::sendMessageBack(MessageExtPtr msg, int delay_level) {
-  return sendMessageBack(msg, delay_level, null);
+  return sendMessageBack(msg, delay_level, "");
 }
 
 bool DefaultMQPushConsumerImpl::sendMessageBack(MessageExtPtr msg, int delay_level, const std::string& brokerName) {

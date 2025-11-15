@@ -107,6 +107,10 @@ RemotingCommand* ClientRemotingProcessor::notifyConsumerIdsChanged(RemotingComma
 
 RemotingCommand* ClientRemotingProcessor::resetOffset(RemotingCommand* request) {
   auto* responseHeader = request->decodeCommandCustomHeader<ResetOffsetRequestHeader>();
+  if (responseHeader == nullptr) {
+    LOG_ERROR_NEW("resetOffset failed because ResetOffsetRequestHeader could not be decoded");
+    return nullptr;
+  }
   auto requestBody = request->body();
   if (requestBody != nullptr && requestBody->size() > 0) {
     std::unique_ptr<ResetOffsetBody> body(ResetOffsetBody::Decode(*requestBody));
@@ -149,6 +153,12 @@ RemotingCommand* ClientRemotingProcessor::receiveReplyMessage(RemotingCommand* r
 
   auto receiveTime = UtilAll::currentTimeMillis();
   auto* requestHeader = request->decodeCommandCustomHeader<ReplyMessageRequestHeader>();
+  if (requestHeader == nullptr) {
+    LOG_WARN_NEW("receive reply message but failed to decode ReplyMessageRequestHeader");
+    response->set_code(MQResponseCode::SYSTEM_ERROR);
+    response->set_remark("reply message header decode failed");
+    return response.release();
+  }
 
   try {
     std::unique_ptr<MQMessageExt> msg(new MQMessageExt);
@@ -180,7 +190,10 @@ RemotingCommand* ClientRemotingProcessor::receiveReplyMessage(RemotingCommand* r
       if (UtilAll::inflate(*body, origin_body)) {
         msg->set_body(std::move(origin_body));
       } else {
-        LOG_WARN_NEW("err when uncompress constant");
+        LOG_WARN_NEW("failed to uncompress reply message body");
+        response->set_code(MQResponseCode::SYSTEM_ERROR);
+        response->set_remark("failed to uncompress reply message body");
+        return response.release();
       }
     } else {
       msg->set_body(std::string(body->array(), body->size()));
@@ -197,7 +210,7 @@ RemotingCommand* ClientRemotingProcessor::receiveReplyMessage(RemotingCommand* r
     processReplyMessage(std::move(msg));
 
     response->set_code(MQResponseCode::SUCCESS);
-    response->set_remark(null);
+    response->set_remark("");
   } catch (const std::exception& e) {
     LOG_WARN_NEW("unknown err when receiveReplyMsg, {}", e.what());
     response->set_code(MQResponseCode::SYSTEM_ERROR);

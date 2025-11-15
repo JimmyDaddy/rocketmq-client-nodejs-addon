@@ -38,6 +38,7 @@ class LocalFileOffsetStore : public OffsetStore {
   void removeOffset(const MQMessageQueue& mq) override;
 
  private:
+  void persistOffsets(const std::map<MQMessageQueue, int64_t>& offsets);
   std::map<MQMessageQueue, int64_t> readLocalOffset();
   std::map<MQMessageQueue, int64_t> readLocalOffsetBak();
 

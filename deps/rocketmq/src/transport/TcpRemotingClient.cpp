@@ -221,11 +221,10 @@ std::unique_ptr<RemotingCommand> TcpRemotingClient::invokeSync(const std::string
     try {
       doBeforeRpcHooks(addr, request, true);
       auto costTime = UtilAll::currentTimeMillis() - beginStartTime;
-      if (timeoutMillis <= 0 || timeoutMillis <= costTime) {
+      if (timeoutMillis <= 0 || timeoutMillis < costTime) {
         THROW_MQEXCEPTION(RemotingTimeoutException, "invokeSync call timeout", -1);
       }
-      auto remainTimeoutMillis = timeoutMillis - costTime;
-      std::unique_ptr<RemotingCommand> response(invokeSyncImpl(channel, request, remainTimeoutMillis));
+      std::unique_ptr<RemotingCommand> response(invokeSyncImpl(channel, request, timeoutMillis));
       doAfterRpcHooks(addr, request, response.get(), false);
       return response;
     } catch (const RemotingSendRequestException& e) {

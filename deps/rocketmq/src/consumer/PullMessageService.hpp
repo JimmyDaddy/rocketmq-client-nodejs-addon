@@ -54,8 +54,8 @@ class PullMessageService {
 
   std::string getServiceName() { return "PullMessageService"; }
 
- private:
-  void pullMessage(PullRequestPtr pullRequest) {
+ protected:
+  virtual void pullMessage(PullRequestPtr pullRequest) {
     MQConsumerInner* consumer = client_instance_->selectConsumer(pullRequest->consumer_group());
     if (consumer != nullptr &&
         std::type_index(typeid(*consumer)) == std::type_index(typeid(DefaultMQPushConsumerImpl))) {

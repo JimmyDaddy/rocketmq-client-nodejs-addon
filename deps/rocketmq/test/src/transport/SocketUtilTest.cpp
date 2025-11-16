@@ -42,6 +42,21 @@ TEST(SocketUtilTest, Convert) {
   EXPECT_EQ(sin->sin_port, 0x6B27);
 }
 
+TEST(SocketUtilTest, AllowsZeroPortForIPv4) {
+  auto sa = StringToSockaddr("127.0.0.1:0");
+  auto* sin = reinterpret_cast<sockaddr_in*>(sa.get());
+  EXPECT_EQ(sin->sin_addr.s_addr, 0x0100007F);
+  EXPECT_EQ(sin->sin_port, 0);
+  EXPECT_EQ(SockaddrToString(rocketmq::GetSockaddrPtr(sa)), "127.0.0.1");
+}
+
+TEST(SocketUtilTest, AllowsZeroPortForIPv6) {
+  auto sa = StringToSockaddr("[2001:db8::1]:0");
+  auto* sin6 = reinterpret_cast<sockaddr_in6*>(sa.get());
+  EXPECT_EQ(sin6->sin6_port, 0);
+  EXPECT_EQ(SockaddrToString(rocketmq::GetSockaddrPtr(sa)), "[2001:db8::1]");
+}
+
 int main(int argc, char* argv[]) {
   InitGoogleMock(&argc, argv);
   testing::GTEST_FLAG(throw_on_failure) = true;

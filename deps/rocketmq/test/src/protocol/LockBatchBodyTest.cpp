@@ -63,7 +63,27 @@ TEST(LockBatchBodyTest, LockBatchRequestBody) {
   EXPECT_EQ(root["mqSet"][1]["queueId"], 2);
 }
 
-TEST(LockBatchBodyTest, UnlockBatchRequestBody) {}
+TEST(LockBatchBodyTest, UnlockBatchRequestBody) {
+  UnlockBatchRequestBody body;
+  body.set_client_id("client-1");
+  body.set_consumer_group("group-a");
+
+  std::vector<MQMessageQueue> queues;
+  queues.emplace_back("TopicA", "broker-x", 0);
+  queues.emplace_back("TopicA", "broker-y", 3);
+  body.set_mq_set(queues);
+
+  const std::string encoded = body.encode();
+  Json::Value root;
+  Json::Reader reader;
+  ASSERT_TRUE(reader.parse(encoded, root));
+
+  EXPECT_EQ("client-1", root["clientId"].asString());
+  EXPECT_EQ("group-a", root["consumerGroup"].asString());
+  ASSERT_EQ(2, static_cast<int>(root["mqSet"].size()));
+  EXPECT_EQ("broker-y", root["mqSet"][1]["brokerName"].asString());
+  EXPECT_EQ(3, root["mqSet"][1]["queueId"].asInt());
+}
 
 TEST(LockBatchBodyTest, LockBatchResponseBody) {
   Json::Value root;

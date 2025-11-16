@@ -23,7 +23,7 @@ namespace rocketmq {
 
 class SubscriptionGroupConfig {
  public:
-  SubscriptionGroupConfig(const string& groupName) {
+  SubscriptionGroupConfig(const std::string& groupName) {
     this->groupName = groupName;
     consumeEnable = true;
     consumeFromMinEnable = true;

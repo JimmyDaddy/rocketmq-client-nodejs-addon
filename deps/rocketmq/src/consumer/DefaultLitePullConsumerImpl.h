@@ -108,6 +108,13 @@ class DefaultLitePullConsumerImpl : public std::enable_shared_from_this<DefaultL
       const std::string& topic,
       TopicMessageQueueChangeListener* topicMessageQueueChangeListener) override;
 
+  std::unique_ptr<PullResult> pullOnce(const MQMessageQueue& mq,
+                                       const std::string& subExpression,
+                                       int64_t offset,
+                                       int maxNums,
+                                       bool block,
+                                       long timeout_millis) override;
+
  public:  // MQConsumerInner
   const std::string& groupName() const override;
   MessageModel messageModel() const override;
@@ -187,6 +194,7 @@ class DefaultLitePullConsumerImpl : public std::enable_shared_from_this<DefaultL
 
  private:
   void set_subscription_type(SubscriptionType subscription_type);
+  void subscriptionAutomatically(const std::string& topic);
 
  private:
   std::mutex mutex_;

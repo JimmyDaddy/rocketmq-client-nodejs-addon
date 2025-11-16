@@ -27,7 +27,9 @@ namespace rocketmq {
 
 class LocalFileOffsetStore : public OffsetStore {
  public:
-  LocalFileOffsetStore(MQClientInstance* instance, const std::string& groupName);
+  LocalFileOffsetStore(MQClientInstance* instance,
+                       const std::string& groupName,
+                       const std::string& storeDirOverride = std::string());
   virtual ~LocalFileOffsetStore();
 
   void load() override;

@@ -20,6 +20,7 @@
 #include <memory>
 
 #include "MessageDecoder.h"
+#include "MQException.h"
 #include "MQMessage.h"
 #include "MessageBatch.h"
 
@@ -29,6 +30,7 @@ using testing::Return;
 
 using rocketmq::MessageBatch;
 using rocketmq::MessageDecoder;
+using rocketmq::MQClientException;
 using rocketmq::MQMessage;
 using rocketmq::stoba;
 
@@ -49,6 +51,38 @@ TEST(MessageBatchTest, Encode) {
   encodeMessage2 = MessageDecoder::encodeMessages(msgs);
   EXPECT_EQ(encodeMessage, encodeMessage2);
   EXPECT_EQ(encodeMessage.size(), 132);  // 44 * 3
+}
+
+TEST(MessageBatchTest, RejectsRetryTopic) {
+  std::vector<MQMessage> msgs;
+  msgs.emplace_back("%RETRY%GID_group", "*", "body");
+  EXPECT_THROW(MessageBatch::generateFromList(msgs), MQClientException);
+}
+
+TEST(MessageBatchTest, RejectsMixedTopics) {
+  std::vector<MQMessage> msgs;
+  msgs.emplace_back("TopicA", "*", "body1");
+  msgs.emplace_back("TopicB", "*", "body2");
+  EXPECT_THROW(MessageBatch::generateFromList(msgs), MQClientException);
+}
+
+TEST(MessageBatchTest, RejectsMixedWaitStoreFlags) {
+  std::vector<MQMessage> msgs;
+  MQMessage first("TopicA", "*", "body1");
+  first.set_wait_store_msg_ok(true);
+  MQMessage second("TopicA", "*", "body2");
+  second.set_wait_store_msg_ok(false);
+  msgs.push_back(first);
+  msgs.push_back(second);
+  EXPECT_THROW(MessageBatch::generateFromList(msgs), MQClientException);
+}
+
+TEST(MessageBatchTest, RejectsDelayedMessages) {
+  std::vector<MQMessage> msgs;
+  MQMessage delayed("TopicA", "*", "body");
+  delayed.set_delay_time_level(2);
+  msgs.push_back(delayed);
+  EXPECT_THROW(MessageBatch::generateFromList(msgs), MQClientException);
 }
 
 int main(int argc, char* argv[]) {

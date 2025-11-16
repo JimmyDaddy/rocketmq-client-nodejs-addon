@@ -104,7 +104,7 @@ class DefaultMQPushConsumerImpl : public std::enable_shared_from_this<DefaultMQP
 
  public:
   void executePullRequestLater(PullRequestPtr pullRequest, long timeDelay);
-  void executePullRequestImmediately(PullRequestPtr pullRequest);
+  virtual void executePullRequestImmediately(PullRequestPtr pullRequest);
 
   void pullMessage(PullRequestPtr pullrequest);
 

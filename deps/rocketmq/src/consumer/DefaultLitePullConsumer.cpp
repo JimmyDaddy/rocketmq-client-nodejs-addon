@@ -123,6 +123,16 @@ void DefaultLitePullConsumer::registerTopicMessageQueueChangeListener(
   pull_consumer_impl_->registerTopicMessageQueueChangeListener(topic, topicMessageQueueChangeListener);
 }
 
+std::unique_ptr<PullResult> DefaultLitePullConsumer::pullOnce(const MQMessageQueue& mq,
+                                                              const std::string& subExpression,
+                                                              int64_t offset,
+                                                              int maxNums,
+                                                              bool block,
+                                                              long timeoutMillis) {
+  long effectiveTimeout = timeoutMillis > 0 ? timeoutMillis : consumer_pull_timeout_millis();
+  return pull_consumer_impl_->pullOnce(mq, subExpression, offset, maxNums, block, effectiveTimeout);
+}
+
 void DefaultLitePullConsumer::setRPCHook(RPCHookPtr rpcHook) {
   dynamic_cast<DefaultLitePullConsumerImpl*>(pull_consumer_impl_.get())->setRPCHook(rpcHook);
 }

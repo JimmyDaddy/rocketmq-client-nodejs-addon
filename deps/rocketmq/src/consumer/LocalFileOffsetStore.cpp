@@ -16,6 +16,7 @@
  */
 #include "LocalFileOffsetStore.h"
 
+#include <cerrno>
 #include <fstream>
 
 #include "Logging.h"
@@ -25,14 +26,23 @@
 
 namespace rocketmq {
 
-LocalFileOffsetStore::LocalFileOffsetStore(MQClientInstance* instance, const std::string& groupName)
+LocalFileOffsetStore::LocalFileOffsetStore(MQClientInstance* instance,
+                                           const std::string& groupName,
+                                           const std::string& storeDirOverride)
     : client_instance_(instance), group_name_(groupName) {
   LOG_INFO("new LocalFileOffsetStore");
 
-  std::string clientId = instance->getClientId();
-  std::string homeDir(UtilAll::getHomeDirectory());
-  std::string storeDir =
-      homeDir + FILE_SEPARATOR + ".rocketmq_offsets" + FILE_SEPARATOR + clientId + FILE_SEPARATOR + groupName;
+  std::string storeDir;
+  if (!storeDirOverride.empty()) {
+    storeDir = storeDirOverride;
+  } else {
+    if (instance == nullptr) {
+      THROW_MQEXCEPTION(MQClientException, "MQClientInstance is null", -1);
+    }
+    std::string clientId = instance->getClientId();
+    std::string homeDir(UtilAll::getHomeDirectory());
+    storeDir = homeDir + FILE_SEPARATOR + ".rocketmq_offsets" + FILE_SEPARATOR + clientId + FILE_SEPARATOR + groupName;
+  }
   store_path_ = storeDir + FILE_SEPARATOR + "offsets.json";
 
   if (!UtilAll::existDirectory(storeDir)) {
@@ -179,8 +189,13 @@ void LocalFileOffsetStore::persistOffsets(const std::map<MQMessageQueue, int64_t
       THROW_MQEXCEPTION(MQClientException, "persist offsets failed", -1);
     }
 
-    if (!UtilAll::ReplaceFile(store_path_, store_path_ + ".bak") || !UtilAll::ReplaceFile(storePathTmp, store_path_)) {
-      LOG_ERROR("could not rename file: %s", strerror(errno));
+    bool backup_ok = UtilAll::ReplaceFile(store_path_, store_path_ + ".bak");
+    int backup_errno = backup_ok ? 0 : errno;
+    bool newfile_ok = UtilAll::ReplaceFile(storePathTmp, store_path_);
+    int newfile_errno = newfile_ok ? 0 : errno;
+    if ((!backup_ok && backup_errno != ENOENT) || !newfile_ok) {
+      int error_code = !newfile_ok ? newfile_errno : backup_errno;
+      LOG_ERROR("could not rename file: %s", strerror(error_code));
     }
   }
 }

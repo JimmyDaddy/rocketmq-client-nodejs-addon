@@ -16,6 +16,7 @@
  */
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
+#include <vector>
 
 #include "MQMessageExt.h"
 #include "MessageExtImpl.h"
@@ -121,6 +122,31 @@ TEST(MessageExtTest, MessageExt) {
 TEST(MessageExtTest, ParseTopicFilterType) {
   EXPECT_EQ(MessageExtImpl::parseTopicFilterType(MessageSysFlag::MULTI_TAGS_FLAG), TopicFilterType::MULTI_TAG);
   EXPECT_EQ(MessageExtImpl::parseTopicFilterType(0), TopicFilterType::SINGLE_TAG);
+}
+
+TEST(MQMessageExtTest, FromListWrapsPointersAndPreservesFields) {
+  std::vector<rocketmq::MessageExtPtr> ptrs;
+
+  auto first = std::make_shared<MessageExtImpl>();
+  first->set_topic("TopicA");
+  first->set_queue_id(1);
+  first->set_queue_offset(100);
+  ptrs.push_back(first);
+
+  auto second = std::make_shared<MessageExtImpl>();
+  second->set_topic("TopicB");
+  second->set_queue_id(2);
+  second->set_queue_offset(200);
+  ptrs.push_back(second);
+
+  auto converted = MQMessageExt::from_list(ptrs);
+  ASSERT_EQ(2u, converted.size());
+  EXPECT_EQ("TopicA", converted[0].topic());
+  EXPECT_EQ(1, converted[0].queue_id());
+  EXPECT_EQ(200, converted[1].queue_offset());
+
+  first->set_queue_offset(999);
+  EXPECT_EQ(999, converted[0].queue_offset());
 }
 
 int main(int argc, char* argv[]) {

@@ -65,6 +65,8 @@ class MessageQueueState {
 
 class AssignedMessageQueue {
  public:
+  AssignedMessageQueue() : rebalance_impl_(nullptr) {}
+
   std::vector<MQMessageQueue> messageQueues() {
     std::vector<MQMessageQueue> mqs;
     std::lock_guard<std::mutex> lock(assigned_message_queue_state_mutex_);

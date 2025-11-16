@@ -152,15 +152,19 @@ MessageExtPtr MessageDecoder::decode(ByteBuffer& byteBuffer, bool readBody, bool
 
   // 15 BODY
   int uncompress_failed = false;
+  const int32_t MAX_BODY_SIZE = 4 * 1024 * 1024;
   int32_t bodyLen = byteBuffer.getInt();
+  if (bodyLen < 0) {
+    LOG_ERROR_NEW("Invalid bodyLen: {} is negative", bodyLen);
+    return nullptr;
+  }
+  if (bodyLen > MAX_BODY_SIZE) {
+    LOG_ERROR_NEW("bodyLen {} exceeds maximum allowed size {}", bodyLen, MAX_BODY_SIZE);
+    return nullptr;
+  }
   if (bodyLen > 0) {
     if (bodyLen > byteBuffer.remaining()) {
       LOG_ERROR_NEW("Invalid bodyLen: {} exceeds buffer size: {}", bodyLen, byteBuffer.remaining());
-      return nullptr;
-    }
-    const int32_t MAX_BODY_SIZE = 4 * 1024 * 1024;
-    if (bodyLen > MAX_BODY_SIZE) {
-      LOG_ERROR_NEW("bodyLen {} exceeds maximum allowed size {}", bodyLen, MAX_BODY_SIZE);
       return nullptr;
     }
     if (readBody) {

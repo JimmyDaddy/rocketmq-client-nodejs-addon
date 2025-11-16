@@ -455,6 +455,7 @@ build_rocketmq_client() {
     -DCMAKE_LINKER="${LINK}"
     -DCMAKE_SYSTEM_PROCESSOR="${CMAKE_SYSTEM_PROCESSOR}"
     -DCMAKE_SYSTEM_NAME="${CMAKE_SYSTEM_NAME}"
+    -DCMAKE_POLICY_VERSION_MINIMUM=3.5
     -DLibevent_USE_STATIC_LIBS=ON
     -DJSONCPP_USE_STATIC_LIBS=ON
     -DZLIB_USE_STATIC_LIBS=ON
@@ -478,6 +479,11 @@ build_rocketmq_client() {
 
   log_info "Compiling RocketMQ C++ client (static + bundled library)"
   cmake --build "${BUILD_DIR}" --target rocketmq_static rocketmq_
+
+  if [ $TEST -eq 1 ]; then
+    log_info "Building unit test binaries"
+    cmake --build "${BUILD_DIR}"
+  fi
 
   # Uncomment if installation is needed
   # log_info "Installing RocketMQ C++ client"
@@ -524,6 +530,7 @@ build_googletest() {
     -DCMAKE_RANLIB="${RANLIB}" \
     -DCMAKE_LINKER="${LINK}" \
     -DCMAKE_CXX_FLAGS=-fPIC \
+    -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
     -DBUILD_STATIC_LIBS=ON \
     -DBUILD_SHARED_LIBS=OFF \
     -DCMAKE_INSTALL_PREFIX="${INSTALL_LIB_DIR}"

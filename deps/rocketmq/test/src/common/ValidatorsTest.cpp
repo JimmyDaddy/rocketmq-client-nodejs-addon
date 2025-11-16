@@ -14,64 +14,74 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-#include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
 #include <string>
 
-#include "MQException.h"
 #include "MQMessage.h"
-#include "Validators.h"
+#include "MQProtos.h"
+#include "common/Validators.h"
 
-using testing::InitGoogleMock;
-using testing::InitGoogleTest;
-using testing::Return;
+#if defined(__GNUC__) && ((__GNUC__ < 4) || (__GNUC__ == 4 && __GNUC_MINOR__ <= 8))
+#define ROCKETMQ_REGEX_SUPPORTED 0
+#else
+#define ROCKETMQ_REGEX_SUPPORTED 1
+#endif
 
 using rocketmq::MQClientException;
 using rocketmq::MQMessage;
 using rocketmq::Validators;
 
-const std::string VALID_PATTERN_STR = "^[a-zA-Z0-9_%-]+$";
-
 TEST(ValidatorsTest, RegularExpressionMatcher) {
-  EXPECT_FALSE(Validators::regularExpressionMatcher("", ""));
-  EXPECT_TRUE(Validators::regularExpressionMatcher("123456", ""));
-  EXPECT_TRUE(Validators::regularExpressionMatcher("123%456", VALID_PATTERN_STR));
-  EXPECT_TRUE(Validators::regularExpressionMatcher("123456", VALID_PATTERN_STR));
+  EXPECT_FALSE(Validators::regularExpressionMatcher("", "^.*$"));
+  EXPECT_TRUE(Validators::regularExpressionMatcher("Group_01", "^[A-Za-z0-9_]+$"));
+#if ROCKETMQ_REGEX_SUPPORTED
+  EXPECT_FALSE(Validators::regularExpressionMatcher("bad space", "^[A-Za-z0-9_]+$"));
+#endif
 }
 
 TEST(ValidatorsTest, GetGroupWithRegularExpression) {
-  EXPECT_EQ(Validators::getGroupWithRegularExpression("", ""), "");
+#if ROCKETMQ_REGEX_SUPPORTED
+  EXPECT_EQ("demo", Validators::getGroupWithRegularExpression("log_demo", "^log_(.*)$"));
+#else
+  EXPECT_EQ("", Validators::getGroupWithRegularExpression("log_demo", "^log_(.*)$"));
+#endif
+  EXPECT_EQ("", Validators::getGroupWithRegularExpression("log-demo", "^log_(.*)$"));
 }
 
-TEST(ValidatorsTest, CheckTopic) {
+TEST(ValidatorsTest, CheckTopicValidations) {
+  EXPECT_NO_THROW(Validators::checkTopic("Topic_ok-1"));
   EXPECT_THROW(Validators::checkTopic(""), MQClientException);
-  std::string exceptionTopic = "1234567890";
-  for (int i = 0; i < 25; i++) {
-    exceptionTopic.append("1234567890");
-  }
-  EXPECT_THROW(Validators::checkTopic(exceptionTopic), MQClientException);
-  EXPECT_THROW(Validators::checkTopic("TBW102"), MQClientException);
+  EXPECT_THROW(Validators::checkTopic(rocketmq::AUTO_CREATE_TOPIC_KEY_TOPIC), MQClientException);
+  EXPECT_THROW(Validators::checkTopic(std::string(256, 'a')), MQClientException);
+#if ROCKETMQ_REGEX_SUPPORTED
+  EXPECT_THROW(Validators::checkTopic("topic with space"), MQClientException);
+#endif
 }
 
-TEST(ValidatorsTest, CheckGroup) {
+TEST(ValidatorsTest, CheckGroupValidations) {
+  EXPECT_NO_THROW(Validators::checkGroup("Group_ok-1"));
   EXPECT_THROW(Validators::checkGroup(""), MQClientException);
-  std::string exceptionTopic = "1234567890";
-  for (int i = 0; i < 25; i++) {
-    exceptionTopic.append("1234567890");
-  }
-  EXPECT_THROW(Validators::checkGroup(exceptionTopic), MQClientException);
+  EXPECT_THROW(Validators::checkGroup(std::string(256, 'b')), MQClientException);
+#if ROCKETMQ_REGEX_SUPPORTED
+  EXPECT_THROW(Validators::checkGroup("group*bad"), MQClientException);
+#endif
 }
 
-TEST(ValidatorsTest, CheckMessage) {
-  MQMessage message("testTopic", "");
-  EXPECT_THROW(Validators::checkMessage(MQMessage("testTopic", ""), 1), MQClientException);
-  EXPECT_THROW(Validators::checkMessage(MQMessage("testTopic", "123"), 2), MQClientException);
+TEST(ValidatorsTest, CheckMessageValidations) {
+  MQMessage valid("Topic", "*", "body");
+  EXPECT_NO_THROW(Validators::checkMessage(valid, 16));
+
+  MQMessage empty("Topic", "*", "");
+  EXPECT_THROW(Validators::checkMessage(empty, 16), MQClientException);
+
+  MQMessage oversized("Topic", "*", std::string(8, 'c'));
+  EXPECT_THROW(Validators::checkMessage(oversized, 4), MQClientException);
 }
 
-int main(int argc, char* argv[]) {
-  InitGoogleMock(&argc, argv);
+int main(int argc, char** argv) {
+  ::testing::InitGoogleTest(&argc, argv);
   testing::GTEST_FLAG(throw_on_failure) = true;
-  testing::GTEST_FLAG(filter) = "ValidatorsTest.Skipped";
+  testing::GTEST_FLAG(filter) = "ValidatorsTest.*";
   return RUN_ALL_TESTS();
 }

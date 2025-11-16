@@ -26,30 +26,41 @@ static const char* VIRTUAL_APPGROUP_PREFIX = "%%PROJECT_%s%%";
 namespace rocketmq {
 
 std::string VirtualEnvUtil::buildWithProjectGroup(const std::string& origin, const std::string& projectGroup) {
-  if (!UtilAll::isBlank(projectGroup)) {
-    char prefix[1024];
-    sprintf(prefix, VIRTUAL_APPGROUP_PREFIX, projectGroup.c_str());
-
-    if (origin.find_last_of(prefix) == std::string::npos) {
-      return origin + prefix;
-    } else {
-      return origin;
-    }
-  } else {
+  if (UtilAll::isBlank(projectGroup)) {
     return origin;
   }
+
+  char prefix[1024];
+  sprintf(prefix, VIRTUAL_APPGROUP_PREFIX, projectGroup.c_str());
+  std::string suffix(prefix);
+
+  if (origin.size() >= suffix.size() &&
+      origin.compare(origin.size() - suffix.size(), suffix.size(), suffix) == 0) {
+    return origin;
+  }
+
+  return origin + suffix;
 }
 
 std::string VirtualEnvUtil::clearProjectGroup(const std::string& origin, const std::string& projectGroup) {
-  char prefix[1024];
-  sprintf(prefix, VIRTUAL_APPGROUP_PREFIX, projectGroup.c_str());
-  std::string::size_type pos = origin.find_last_of(prefix);
-
-  if (!UtilAll::isBlank(prefix) && pos != std::string::npos) {
-    return origin.substr(0, pos);
-  } else {
+  if (UtilAll::isBlank(projectGroup)) {
     return origin;
   }
+
+  char prefix[1024];
+  sprintf(prefix, VIRTUAL_APPGROUP_PREFIX, projectGroup.c_str());
+  std::string suffix(prefix);
+
+  if (origin.size() < suffix.size()) {
+    return origin;
+  }
+
+  auto pos = origin.rfind(suffix);
+  if (pos != std::string::npos && pos + suffix.size() == origin.size()) {
+    return origin.substr(0, pos);
+  }
+
+  return origin;
 }
 
 }  // namespace rocketmq

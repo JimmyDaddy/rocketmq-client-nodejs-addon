@@ -141,9 +141,6 @@ std::unique_ptr<sockaddr_storage> StringToSockaddr(const std::string& addr) {
     }
     try {
       uint32_t n = std::stoul(port_str);
-      if (n == 0) {
-        throw std::invalid_argument("port cannot be zero");
-      }
       if (n > std::numeric_limits<uint16_t>::max()) {
         throw std::out_of_range("port is too large: " + std::to_string(n) +
                                " (max: " + std::to_string(std::numeric_limits<uint16_t>::max()) + ")");

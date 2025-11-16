@@ -17,8 +17,11 @@
 #ifndef ROCKETMQ_DEFAULTLITEPULLCONSUMER_H_
 #define ROCKETMQ_DEFAULTLITEPULLCONSUMER_H_
 
+#include <memory>
+
 #include "DefaultLitePullConsumerConfigProxy.h"
 #include "LitePullConsumer.h"
+#include "PullResult.h"
 #include "RPCHook.h"
 
 namespace rocketmq {
@@ -66,6 +69,13 @@ class ROCKETMQCLIENT_API DefaultLitePullConsumer : public DefaultLitePullConsume
   void registerTopicMessageQueueChangeListener(
       const std::string& topic,
       TopicMessageQueueChangeListener* topicMessageQueueChangeListener) override;
+
+  std::unique_ptr<PullResult> pullOnce(const MQMessageQueue& mq,
+                                       const std::string& subExpression,
+                                       int64_t offset,
+                                       int maxNums,
+                                       bool block,
+                                       long timeoutMillis) override;
 
  public:
   void setRPCHook(RPCHookPtr rpcHook);

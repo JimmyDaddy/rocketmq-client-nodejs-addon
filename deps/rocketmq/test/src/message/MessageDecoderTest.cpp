@@ -203,6 +203,33 @@ TEST(MessageDecoderTest, Decode) {
   EXPECT_EQ(msgs[0]->toString(), msgExt.toString());
 }
 
+TEST(MessageDecoderTest, RejectsNegativeBodyLen) {
+  std::unique_ptr<ByteBuffer> byteBuffer(ByteBuffer::allocate(128));
+
+  byteBuffer->putInt(0);    // TOTALSIZE
+  byteBuffer->putInt(0);    // MAGICCODE
+  byteBuffer->putInt(0);    // BODYCRC
+  byteBuffer->putInt(0);    // QUEUEID
+  byteBuffer->putInt(0);    // FLAG
+  byteBuffer->putLong(0);   // QUEUEOFFSET
+  byteBuffer->putLong(0);   // PHYSICALOFFSET
+  byteBuffer->putInt(0);    // SYSFLAG (IPv4)
+  byteBuffer->putLong(0);   // BORNTIMESTAMP
+  byteBuffer->putInt(ntohl(inet_addr("127.0.0.1")));
+  byteBuffer->putInt(10091);
+  byteBuffer->putLong(0);   // STORETIMESTAMP
+  byteBuffer->putInt(ntohl(inet_addr("127.0.0.2")));
+  byteBuffer->putInt(10092);
+  byteBuffer->putInt(0);    // RECONSUMETIMES
+  byteBuffer->putLong(0);   // PREPARED TRANSACTION OFFSET
+  byteBuffer->putInt(-1);   // BODYLEN (invalid)
+
+  byteBuffer->flip();
+
+  auto msgs = MessageDecoder::decodes(*byteBuffer);
+  EXPECT_TRUE(msgs.empty());
+}
+
 TEST(MessageDecoderTest, MessagePropertiesAndToString) {
   std::map<std::string, std::string> properties;
   properties["RocketMQ"] = "cpp-client";

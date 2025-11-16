@@ -17,12 +17,16 @@
 #ifndef ROCKETMQ_LITEPULLCONSUMER_H_
 #define ROCKETMQ_LITEPULLCONSUMER_H_
 
+#include <memory>
+
 #include "TopicMessageQueueChangeListener.h"
 #include "MessageSelector.h"
 #include "MQMessageExt.h"
 #include "MQMessageQueue.h"
 
 namespace rocketmq {
+
+class PullResult;
 
 /**
  * LitePullConsumer - interface for pull consumer
@@ -72,6 +76,13 @@ class ROCKETMQCLIENT_API LitePullConsumer {
   virtual void registerTopicMessageQueueChangeListener(
       const std::string& topic,
       TopicMessageQueueChangeListener* topicMessageQueueChangeListener) = 0;
+
+  virtual std::unique_ptr<PullResult> pullOnce(const MQMessageQueue& mq,
+                                               const std::string& subExpression,
+                                               int64_t offset,
+                                               int maxNums,
+                                               bool block,
+                                               long timeout_millis) = 0;
 };
 
 }  // namespace rocketmq

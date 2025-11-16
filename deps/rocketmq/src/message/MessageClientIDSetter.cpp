@@ -16,6 +16,7 @@
  */
 #include "MessageClientIDSetter.h"
 
+#include <array>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -31,28 +32,59 @@
 
 namespace rocketmq {
 
+namespace {
+
+constexpr uint32_t kFnvOffsetBasis = 2166136261u;
+constexpr uint32_t kFnvPrime = 16777619u;
+
+uint32_t FoldIPv6Address(const struct sockaddr_in6* addr) {
+  const auto* bytes = reinterpret_cast<const uint8_t*>(&addr->sin6_addr);
+  uint32_t hash = kFnvOffsetBasis;
+  for (size_t i = 0; i < kIPv6AddrSize; ++i) {
+    hash ^= bytes[i];
+    hash *= kFnvPrime;
+  }
+  return ByteOrderUtil::NorminalBigEndian(hash);
+}
+
+void WriteIpBytes(const sockaddr* addr, std::array<uint8_t, kIPv4AddrSize>& ip_bytes, bool& initialized) {
+  if (addr == nullptr || initialized) {
+    return;
+  }
+
+  if (addr->sa_family == AF_INET) {
+    auto* sin = (struct sockaddr_in*)addr;
+    std::memcpy(ip_bytes.data(), &sin->sin_addr, kIPv4AddrSize);
+    initialized = true;
+    return;
+  }
+
+  if (addr->sa_family == AF_INET6) {
+    auto* sin6 = (struct sockaddr_in6*)addr;
+    auto folded = FoldIPv6Address(sin6);
+    std::memcpy(ip_bytes.data(), &folded, kIPv4AddrSize);
+    initialized = true;
+  }
+}
+
+}  // namespace
+
 MessageClientIDSetter::MessageClientIDSetter() {
   std::srand((uint32_t)std::time(NULL));
 
-  std::unique_ptr<ByteBuffer> buffer;
+  std::array<uint8_t, kIPv4AddrSize> ip_bytes{};
+  bool ip_initialized = false;
   auto self_ip = GetSelfIP();
-  const sockaddr* addr = GetSockaddrPtr(self_ip);
-  if (addr != nullptr) {
-    buffer.reset(ByteBuffer::allocate(SockaddrSize(addr) + 2 + 4));
-    if (addr->sa_family == AF_INET) {
-      auto* sin = (struct sockaddr_in*)addr;
-      buffer->put(ByteArray(reinterpret_cast<char*>(&sin->sin_addr), kIPv4AddrSize));
-    } else if (addr->sa_family == AF_INET6) {
-      auto* sin6 = (struct sockaddr_in6*)addr;
-      buffer->put(ByteArray(reinterpret_cast<char*>(&sin6->sin6_addr), kIPv6AddrSize));
-    } else {
-      (void)buffer.release();
-    }
+  WriteIpBytes(GetSockaddrPtr(self_ip), ip_bytes, ip_initialized);
+
+  if (!ip_initialized) {
+    auto fallback = ByteOrderUtil::NorminalBigEndian(static_cast<uint32_t>(UtilAll::currentTimeMillis()));
+    std::memcpy(ip_bytes.data(), &fallback, sizeof(fallback));
   }
-  if (buffer == nullptr) {
-    buffer.reset(ByteBuffer::allocate(4 + 2 + 4));
-    buffer->putInt(UtilAll::currentTimeMillis());
-  }
+
+  std::unique_ptr<ByteBuffer> buffer;
+  buffer.reset(ByteBuffer::allocate(kIPv4AddrSize + sizeof(int16_t) + sizeof(int32_t)));
+  buffer->put(ByteArray(reinterpret_cast<char*>(ip_bytes.data()), kIPv4AddrSize));
   buffer->putShort(UtilAll::getProcessId());
   buffer->putInt(std::rand());
 

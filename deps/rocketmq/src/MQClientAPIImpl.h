@@ -88,16 +88,19 @@ class MQClientAPIImpl {
 
   MQMessageExt viewMessage(const std::string& addr, int64_t phyoffset, int timeoutMillis);
 
-  int64_t searchOffset(const std::string& addr,
-                       const std::string& topic,
-                       int queueId,
-                       int64_t timestamp,
-                       int timeoutMillis);
+  virtual int64_t searchOffset(const std::string& addr,
+                               const std::string& topic,
+                               int queueId,
+                               int64_t timestamp,
+                               int timeoutMillis);
 
-  int64_t getMaxOffset(const std::string& addr, const std::string& topic, int queueId, int timeoutMillis);
-  int64_t getMinOffset(const std::string& addr, const std::string& topic, int queueId, int timeoutMillis);
+  virtual int64_t getMaxOffset(const std::string& addr, const std::string& topic, int queueId, int timeoutMillis);
+  virtual int64_t getMinOffset(const std::string& addr, const std::string& topic, int queueId, int timeoutMillis);
 
-  int64_t getEarliestMsgStoretime(const std::string& addr, const std::string& topic, int queueId, int timeoutMillis);
+  virtual int64_t getEarliestMsgStoretime(const std::string& addr,
+                                          const std::string& topic,
+                                          int queueId,
+                                          int timeoutMillis);
 
   void getConsumerIdListByGroup(const std::string& addr,
                                 const std::string& consumerGroup,
@@ -141,7 +144,7 @@ class MQClientAPIImpl {
                      int timeoutMillis,
                      bool oneway = false);
 
-  TopicRouteData* getTopicRouteInfoFromNameServer(const std::string& topic, int timeoutMillis);
+  virtual TopicRouteData* getTopicRouteInfoFromNameServer(const std::string& topic, int timeoutMillis);
 
   TopicList* getTopicListFromNameServer();
 

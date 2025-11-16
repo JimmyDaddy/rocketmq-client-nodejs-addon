@@ -32,6 +32,7 @@ TEST(PullSysFlagTest, Flag) {
   EXPECT_EQ(PullSysFlag::buildSysFlag(true, true, false, false), 3);
   EXPECT_EQ(PullSysFlag::buildSysFlag(true, true, true, false), 7);
   EXPECT_EQ(PullSysFlag::buildSysFlag(true, true, true, true), 15);
+  EXPECT_EQ(PullSysFlag::buildSysFlag(true, true, true, true, true), 31);
 
   EXPECT_EQ(PullSysFlag::buildSysFlag(false, true, false, false), 2);
   EXPECT_EQ(PullSysFlag::buildSysFlag(false, true, true, false), 6);
@@ -41,13 +42,16 @@ TEST(PullSysFlagTest, Flag) {
   EXPECT_EQ(PullSysFlag::buildSysFlag(false, false, true, true), 12);
 
   EXPECT_EQ(PullSysFlag::buildSysFlag(false, false, false, true), 8);
+  EXPECT_EQ(PullSysFlag::buildSysFlag(false, false, false, true, true), 24);
+  EXPECT_EQ(PullSysFlag::buildSysFlag(false, false, false, false, true), 16);
 
   int FLAG_COMMIT_OFFSET = 0x1 << 0;
   int FLAG_SUSPEND = 0x1 << 1;
   int FLAG_SUBSCRIPTION = 0x1 << 2;
   int FLAG_CLASS_FILTER = 0x1 << 3;
+  int FLAG_LITE_PULL = 0x1 << 4;
 
-  for (int i = 0; i < 16; i++) {
+  for (int i = 0; i < 32; i++) {
     if ((i & FLAG_COMMIT_OFFSET) == FLAG_COMMIT_OFFSET) {
       EXPECT_TRUE(PullSysFlag::hasCommitOffsetFlag(i));
     } else {
@@ -70,6 +74,12 @@ TEST(PullSysFlagTest, Flag) {
       EXPECT_TRUE(PullSysFlag::hasClassFilterFlag(i));
     } else {
       EXPECT_FALSE(PullSysFlag::hasClassFilterFlag(i));
+    }
+
+    if ((i & FLAG_LITE_PULL) == FLAG_LITE_PULL) {
+      EXPECT_TRUE(PullSysFlag::hasLitePullFlag(i));
+    } else {
+      EXPECT_FALSE(PullSysFlag::hasLitePullFlag(i));
     }
 
     if ((i & FLAG_COMMIT_OFFSET) == FLAG_COMMIT_OFFSET) {

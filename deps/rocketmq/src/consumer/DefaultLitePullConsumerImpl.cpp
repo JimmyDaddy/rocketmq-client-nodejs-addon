@@ -838,6 +838,23 @@ void DefaultLitePullConsumerImpl::registerTopicMessageQueueChangeListener(
   }
 }
 
+std::unique_ptr<PullResult> DefaultLitePullConsumerImpl::pullOnce(const MQMessageQueue& mq,
+                                                                  const std::string& subExpression,
+                                                                  int64_t offset,
+                                                                  int maxNums,
+                                                                  bool block,
+                                                                  long timeout_millis) {
+  if (service_state_ != ServiceState::RUNNING) {
+    THROW_MQEXCEPTION(MQClientException, "The PullConsumer service state not OK, maybe not started", -1);
+  }
+
+  subscriptionAutomatically(mq.topic());
+  std::unique_ptr<SubscriptionData> subscription_data(FilterAPI::buildSubscriptionData(mq.topic(), subExpression));
+  long effective_timeout = timeout_millis > 0 ? timeout_millis : getDefaultLitePullConsumerConfig()->consumer_pull_timeout_millis();
+  PullResult* result = pullSyncImpl(mq, subscription_data.get(), offset, maxNums, block, effective_timeout);
+  return std::unique_ptr<PullResult>(result);
+}
+
 ConsumerRunningInfo* DefaultLitePullConsumerImpl::consumerRunningInfo() {
   auto* info = new ConsumerRunningInfo();
 
@@ -888,6 +905,18 @@ void DefaultLitePullConsumerImpl::set_subscription_type(SubscriptionType subscri
     subscription_type_ = subscription_type;
   } else if (subscription_type_ != subscription_type) {
     THROW_MQEXCEPTION(MQClientException, "Subscribe and assign are mutually exclusive.", -1);
+  }
+}
+
+void DefaultLitePullConsumerImpl::subscriptionAutomatically(const std::string& topic) {
+  if (subscription_type_ != SubscriptionType::SUBSCRIBE || topic.empty()) {
+    return;
+  }
+
+  auto* subscription_data = rebalance_impl_->getSubscriptionData(topic);
+  if (subscription_data == nullptr) {
+    std::unique_ptr<SubscriptionData> data(FilterAPI::buildSubscriptionData(topic, SUB_ALL));
+    rebalance_impl_->setSubscriptionData(topic, data.release());
   }
 }
 

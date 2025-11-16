@@ -14,28 +14,31 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-#include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
 #include <string>
 
 #include "VirtualEnvUtil.h"
 
-using testing::InitGoogleMock;
-using testing::InitGoogleTest;
-using testing::Return;
-
 using rocketmq::VirtualEnvUtil;
 
 TEST(VirtualEnvUtilTest, BuildWithProjectGroup) {
   EXPECT_EQ(VirtualEnvUtil::buildWithProjectGroup("origin", ""), "origin");
   EXPECT_EQ(VirtualEnvUtil::buildWithProjectGroup("origin", "123"), "origin%PROJECT_123%");
+  EXPECT_EQ(VirtualEnvUtil::buildWithProjectGroup("origin%PROJECT_123%", "123"), "origin%PROJECT_123%");
+  EXPECT_EQ(VirtualEnvUtil::buildWithProjectGroup("value%withPercent", "123"), "value%withPercent%PROJECT_123%");
 }
 
-TEST(VirtualEnvUtilTest, ClearProjectGroup) {}
+TEST(VirtualEnvUtilTest, ClearProjectGroup) {
+  EXPECT_EQ(VirtualEnvUtil::clearProjectGroup("origin", ""), "origin");
+  EXPECT_EQ(VirtualEnvUtil::clearProjectGroup("origin", "123"), "origin");
+  EXPECT_EQ(VirtualEnvUtil::clearProjectGroup("origin%PROJECT_123%", "123"), "origin");
+  EXPECT_EQ(VirtualEnvUtil::clearProjectGroup("origin%PROJECT_123%", "456"), "origin%PROJECT_123%");
+  EXPECT_EQ(VirtualEnvUtil::clearProjectGroup("value%withPercent%PROJECT_123%", "123"), "value%withPercent");
+}
 
 int main(int argc, char* argv[]) {
-  InitGoogleMock(&argc, argv);
+  ::testing::InitGoogleTest(&argc, argv);
   testing::GTEST_FLAG(throw_on_failure) = true;
   testing::GTEST_FLAG(filter) = "VirtualEnvUtilTest.*";
   return RUN_ALL_TESTS();

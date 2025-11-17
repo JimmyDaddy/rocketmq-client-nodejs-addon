@@ -20,6 +20,8 @@ jobs:
     runs-on: ubuntu-24.04
     container:
       image: alibaba-cloud-linux-3-registry.cn-hangzhou.cr.aliyuncs.com/alinux3/alinux3:latest
+    env:
+      ZIG_TARGET: x86_64-linux-gnu
     steps:
       - name: Install prerequisites
         run: yum install -y git curl wget xz tar unzip rsync which python3 python3-pip python3-setuptools autoconf automake libtool pkgconfig gcc gcc-c++ make ninja-build cmake file vim procps-ng iputils
@@ -31,6 +33,25 @@ jobs:
         run: |
           curl -fsSL https://rpm.nodesource.com/setup_18.x | bash -
           yum install -y nodejs
+
+      - name: Setup Zig
+        uses: mlugg/setup-zig@v2
+        with:
+          version: 0.15.2
+
+      - name: Configure Zig environment
+        run: |
+          ZIG_BIN=$(command -v zig)
+          if [ -z "$ZIG_BIN" ]; then
+            echo "zig binary not found" >&2
+            exit 1
+          fi
+          echo "ZIG_BIN=$ZIG_BIN" >> "$GITHUB_ENV"
+          echo "CC=$ZIG_BIN cc -target $ZIG_TARGET -fno-sanitize=undefined" >> "$GITHUB_ENV"
+          echo "CXX=$ZIG_BIN c++ -target $ZIG_TARGET -fno-sanitize=undefined" >> "$GITHUB_ENV"
+          echo "CFLAGS=-fPIC -fno-sanitize=undefined" >> "$GITHUB_ENV"
+          echo "CXXFLAGS=-fPIC -fno-sanitize=undefined" >> "$GITHUB_ENV"
+          echo "LDFLAGS=-static-libstdc++ -static-libgcc -fno-sanitize=undefined" >> "$GITHUB_ENV"
 
       - name: Install npm dependencies
         run: npm install --no-audit --prefer-offline
@@ -57,6 +78,8 @@ jobs:
     runs-on: ubuntu-24.04-arm
     container:
       image: alibaba-cloud-linux-3-registry.cn-hangzhou.cr.aliyuncs.com/alinux3/alinux3:latest
+    env:
+      ZIG_TARGET: aarch64-linux-gnu
     steps:
       - name: Install prerequisites
         run: yum install -y git curl wget xz tar unzip rsync which python3 python3-pip python3-setuptools autoconf automake libtool pkgconfig gcc gcc-c++ make ninja-build cmake file vim procps-ng iputils
@@ -68,6 +91,25 @@ jobs:
         run: |
           curl -fsSL https://rpm.nodesource.com/setup_18.x | bash -
           yum install -y nodejs
+
+      - name: Setup Zig
+        uses: mlugg/setup-zig@v2
+        with:
+          version: 0.15.2
+
+      - name: Configure Zig environment
+        run: |
+          ZIG_BIN=$(command -v zig)
+          if [ -z "$ZIG_BIN" ]; then
+            echo "zig binary not found" >&2
+            exit 1
+          fi
+          echo "ZIG_BIN=$ZIG_BIN" >> "$GITHUB_ENV"
+          echo "CC=$ZIG_BIN cc -target $ZIG_TARGET -fno-sanitize=undefined" >> "$GITHUB_ENV"
+          echo "CXX=$ZIG_BIN c++ -target $ZIG_TARGET -fno-sanitize=undefined" >> "$GITHUB_ENV"
+          echo "CFLAGS=-fPIC -fno-sanitize=undefined" >> "$GITHUB_ENV"
+          echo "CXXFLAGS=-fPIC -fno-sanitize=undefined" >> "$GITHUB_ENV"
+          echo "LDFLAGS=-static-libstdc++ -static-libgcc -fno-sanitize=undefined" >> "$GITHUB_ENV"
 
       - name: Install npm dependencies
         run: npm install --no-audit --prefer-offline
@@ -94,12 +136,33 @@ jobs:
     runs-on: ubuntu-24.04
     container:
       image: alpine:latest
+    env:
+      ZIG_TARGET: x86_64-linux-musl
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Install system dependencies
         run: apk add --no-cache nodejs npm bash build-base cmake ninja python3 curl unzip git autoconf automake libtool pkgconfig
+
+      - name: Setup Zig
+        uses: mlugg/setup-zig@v2
+        with:
+          version: 0.15.2
+
+      - name: Configure Zig environment
+        run: |
+          ZIG_BIN=$(command -v zig)
+          if [ -z "$ZIG_BIN" ]; then
+            echo "zig binary not found" >&2
+            exit 1
+          fi
+          echo "ZIG_BIN=$ZIG_BIN" >> "$GITHUB_ENV"
+          echo "CC=$ZIG_BIN cc -target $ZIG_TARGET -fno-sanitize=undefined" >> "$GITHUB_ENV"
+          echo "CXX=$ZIG_BIN c++ -target $ZIG_TARGET -fno-sanitize=undefined" >> "$GITHUB_ENV"
+          echo "CFLAGS=-fPIC -fno-sanitize=undefined" >> "$GITHUB_ENV"
+          echo "CXXFLAGS=-fPIC -fno-sanitize=undefined" >> "$GITHUB_ENV"
+          echo "LDFLAGS=-static-libstdc++ -static-libgcc -fno-sanitize=undefined" >> "$GITHUB_ENV"
 
       - name: Install npm dependencies
         run: npm install --no-audit --prefer-offline
@@ -126,12 +189,33 @@ jobs:
     runs-on: ubuntu-24.04-arm
     container:
       image: alpine:latest
+    env:
+      ZIG_TARGET: aarch64-linux-musl
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Install system dependencies
         run: apk add --no-cache nodejs npm bash build-base cmake ninja python3 curl unzip git autoconf automake libtool pkgconfig
+
+      - name: Setup Zig
+        uses: mlugg/setup-zig@v2
+        with:
+          version: 0.15.2
+
+      - name: Configure Zig environment
+        run: |
+          ZIG_BIN=$(command -v zig)
+          if [ -z "$ZIG_BIN" ]; then
+            echo "zig binary not found" >&2
+            exit 1
+          fi
+          echo "ZIG_BIN=$ZIG_BIN" >> "$GITHUB_ENV"
+          echo "CC=$ZIG_BIN cc -target $ZIG_TARGET -fno-sanitize=undefined" >> "$GITHUB_ENV"
+          echo "CXX=$ZIG_BIN c++ -target $ZIG_TARGET -fno-sanitize=undefined" >> "$GITHUB_ENV"
+          echo "CFLAGS=-fPIC -fno-sanitize=undefined" >> "$GITHUB_ENV"
+          echo "CXXFLAGS=-fPIC -fno-sanitize=undefined" >> "$GITHUB_ENV"
+          echo "LDFLAGS=-static-libstdc++ -static-libgcc -fno-sanitize=undefined" >> "$GITHUB_ENV"
 
       - name: Install npm dependencies
         run: npm install --no-audit --prefer-offline

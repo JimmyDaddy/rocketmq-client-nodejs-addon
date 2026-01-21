@@ -17,22 +17,24 @@
 #ifndef __ROCKETMQ_CONSUMER_ACK_H__
 #define __ROCKETMQ_CONSUMER_ACK_H__
 
+#include <atomic>
 #include <future>
 
 #include <napi.h>
 
 namespace __node_rocketmq__ {
 
+struct AddonData;
+
 class ConsumerAck : public Napi::ObjectWrap<ConsumerAck> {
  public:
-  static Napi::Object Init(Napi::Env env, Napi::Object exports);
+  static Napi::Object Init(Napi::Env env, Napi::Object exports, AddonData* addon_data);
   static Napi::Object NewInstance(Napi::Env env);
 
   ConsumerAck(const Napi::CallbackInfo& info);
 
   void SetPromise(std::promise<bool>&& promise);
 
-  void Done(bool ack);
   void Done(std::exception_ptr exception);
 
  private:
@@ -40,6 +42,7 @@ class ConsumerAck : public Napi::ObjectWrap<ConsumerAck> {
 
  private:
   std::promise<bool> promise_;
+  std::atomic<bool> done_called_{false};
 };
 
 }  // namespace __node_rocketmq__

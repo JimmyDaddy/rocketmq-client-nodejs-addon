@@ -25,11 +25,16 @@
 
 namespace __node_rocketmq__ {
 
+struct AddonData;
+class ConsumerStartWorker;
+class ConsumerShutdownWorker;
 class ConsumerMessageListener;
 
 class RocketMQPushConsumer : public Napi::ObjectWrap<RocketMQPushConsumer> {
+  friend class ConsumerStartWorker;
+  friend class ConsumerShutdownWorker;
  public:
-  static Napi::Object Init(Napi::Env env, Napi::Object exports);
+  static Napi::Object Init(Napi::Env env, Napi::Object exports, AddonData* addon_data);
 
   RocketMQPushConsumer(const Napi::CallbackInfo& info);
   ~RocketMQPushConsumer();

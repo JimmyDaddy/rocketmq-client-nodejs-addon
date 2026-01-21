@@ -28,14 +28,23 @@
 #include <unistd.h>
 #endif
 
+#include "addon_data.h"
 #include "consumer_ack.h"
 #include "producer.h"
 #include "push_consumer.h"
 
 namespace __node_rocketmq__ {
 
+static void DeleteAddonData(Napi::Env, AddonData* data) {
+  delete data;
+}
+
+AddonData* GetAddonData(Napi::Env env) {
+  return env.GetInstanceData<AddonData>();
+}
+
 namespace {
-#if ROCKETMQ_HAS_EXECINFO
+#if ROCKETMQ_HAS_EXECINFO && !defined(ROCKETMQ_COVERAGE)
 void CrashSignalHandler(int signo) {
   void* frames[64];
   const int count = backtrace(frames, 64);
@@ -65,9 +74,13 @@ inline void MaybeInstallCrashHandler() {}
 
 Napi::Object Init(Napi::Env env, Napi::Object exports) {
   MaybeInstallCrashHandler();
-  RocketMQProducer::Init(env, exports);
-  RocketMQPushConsumer::Init(env, exports);
-  ConsumerAck::Init(env, exports);
+
+  auto* addon_data = new AddonData();
+  env.SetInstanceData<AddonData, DeleteAddonData>(addon_data);
+
+  RocketMQProducer::Init(env, exports, addon_data);
+  RocketMQPushConsumer::Init(env, exports, addon_data);
+  ConsumerAck::Init(env, exports, addon_data);
   return exports;
 }
 

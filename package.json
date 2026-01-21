@@ -24,6 +24,12 @@
       10
     ]
   },
+  "scripts": {
+    "build": "cmake-js build",
+    "build:coverage": "cmake-js rebuild --CDROCKETMQ_ENABLE_COVERAGE=ON --CDROCKETMQ_USE_STUB=ON",
+    "test": "node --expose-gc --test --test-force-exit",
+    "test:coverage": "npm run build:coverage && node --expose-gc --test --test-force-exit && gcovr -r . --filter src --exclude test --print-summary"
+  },
   "dependencies": {
     "bindings": "^1.5.0"
   },

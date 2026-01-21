@@ -15,31 +15,49 @@
  * limitations under the License.
  */
 #include "consumer_ack.h"
+
+#include <cstdlib>
 #include <exception>
-#include "napi.h"
+
+#include <napi.h>
+
+#include "addon_data.h"
 
 namespace __node_rocketmq__ {
 
-static void DeleteFunctionReference(Napi::Env, Napi::FunctionReference* data) {
-  delete data;
+#if defined(ROCKETMQ_COVERAGE) || defined(ROCKETMQ_USE_STUB)
+namespace {
+bool IsEnvEnabled(const char* name) {
+  const char* value = std::getenv(name);
+  if (value == nullptr) {
+    return false;
+  }
+  return value[0] != '\0' && value[0] != '0';
 }
+}
+#endif
 
-Napi::Object ConsumerAck::Init(Napi::Env env, Napi::Object exports) {
+Napi::Object ConsumerAck::Init(Napi::Env env, Napi::Object exports, AddonData* addon_data) {
   Napi::Function func = DefineClass(
       env, "ConsumerAck", {InstanceMethod<&ConsumerAck::Done>("done")});
 
-  // Store the constructor in env to avoid memory leak
-  Napi::FunctionReference* constructor = new Napi::FunctionReference();
-  *constructor = Napi::Persistent(func);
-  env.SetInstanceData<Napi::FunctionReference, DeleteFunctionReference>(constructor);
+  addon_data->consumer_ack_constructor = Napi::Persistent(func);
 
   exports.Set("ConsumerAck", func);
   return exports;
 }
 
 Napi::Object ConsumerAck::NewInstance(Napi::Env env) {
-  Napi::Object obj = env.GetInstanceData<Napi::FunctionReference>()->New({});
-  return obj;
+  AddonData* addon_data = GetAddonData(env);
+#if defined(ROCKETMQ_COVERAGE) || defined(ROCKETMQ_USE_STUB)
+  if (addon_data == nullptr || IsEnvEnabled("ROCKETMQ_STUB_CONSUMER_ACK_NULL_ADDON_DATA")) {
+#else
+  if (addon_data == nullptr) {
+#endif
+    Napi::Error::New(env, "ConsumerAck constructor not initialized").ThrowAsJavaScriptException();
+    return Napi::Object();
+  }
+  return addon_data->consumer_ack_constructor.New({});
 }
 
 ConsumerAck::ConsumerAck(const Napi::CallbackInfo& info)
@@ -49,34 +67,39 @@ void ConsumerAck::SetPromise(std::promise<bool>&& promise) {
   promise_ = std::move(promise);
 }
 
-void ConsumerAck::Done(bool ack) {
-  try {
-    promise_.set_value(ack);
-  } catch (const std::future_error& e) {
-    // ignore
-  }
-}
-
 void ConsumerAck::Done(std::exception_ptr exception) {
-  try {
-    promise_.set_exception(exception);
-  } catch (const std::future_error& e) {
-    // ignore
+  if (!done_called_.exchange(true)) {
+    try {
+      promise_.set_exception(exception);
+    } catch (const std::future_error&) {
+    }
   }
 }
 
 Napi::Value ConsumerAck::Done(const Napi::CallbackInfo& info) {
-  try {
-    if (info.Length() >= 1) {
-      Napi::Value ack = info[0];
-      if (ack.IsBoolean() && !ack.ToBoolean()) {
-        Done(false);
-        return info.Env().Undefined();
-      }
+  if (done_called_.exchange(true)) {
+    return info.Env().Undefined();
+  }
+
+  bool ack = true;
+  if (info.Length() >= 1) {
+    Napi::Value ack_value = info[0];
+    if (ack_value.IsBoolean() && !ack_value.ToBoolean()) {
+      ack = false;
     }
-    Done(true);
-  } catch (const std::exception& e) {
-    // ignore
+  }
+
+#if defined(ROCKETMQ_COVERAGE) || defined(ROCKETMQ_USE_STUB)
+  if (IsEnvEnabled("ROCKETMQ_STUB_CONSUMER_ACK_FORCE_FUTURE_ERROR")) {
+    try {
+      promise_.set_value(true);
+    } catch (const std::future_error&) {
+    }
+  }
+#endif
+  try {
+    promise_.set_value(ack);
+  } catch (const std::future_error&) {
   }
   return info.Env().Undefined();
 }

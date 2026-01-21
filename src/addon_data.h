@@ -14,42 +14,20 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-#ifndef __ROCKETMQ_PRODUCER_H__
-#define __ROCKETMQ_PRODUCER_H__
+#ifndef __ROCKETMQ_ADDON_DATA_H__
+#define __ROCKETMQ_ADDON_DATA_H__
 
 #include <napi.h>
 
-#include <DefaultMQProducer.h>
-
 namespace __node_rocketmq__ {
 
-struct AddonData;
-class ProducerStartWorker;
-class ProducerShutdownWorker;
-
-class RocketMQProducer : public Napi::ObjectWrap<RocketMQProducer> {
-  friend class ProducerStartWorker;
-  friend class ProducerShutdownWorker;
- public:
-  static Napi::Object Init(Napi::Env env, Napi::Object exports, AddonData* addon_data);
-
-  RocketMQProducer(const Napi::CallbackInfo& info);
-  ~RocketMQProducer();
-
- private:
-  Napi::Value SetSessionCredentials(const Napi::CallbackInfo& info);
-
-  Napi::Value Start(const Napi::CallbackInfo& info);
-  Napi::Value Shutdown(const Napi::CallbackInfo& info);
-
-  Napi::Value Send(const Napi::CallbackInfo& info);
-
- private:
-  void SetOptions(const Napi::Object& options);
-
- private:
-  rocketmq::DefaultMQProducer producer_;
+struct AddonData {
+  Napi::FunctionReference producer_constructor;
+  Napi::FunctionReference push_consumer_constructor;
+  Napi::FunctionReference consumer_ack_constructor;
 };
+
+AddonData* GetAddonData(Napi::Env env);
 
 }  // namespace __node_rocketmq__
 

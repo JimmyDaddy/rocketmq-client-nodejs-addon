@@ -208,3 +208,11 @@ deps/rocketmq/test/bin
 deps/rocketmq/tmp_*
 deps/rocketmq/libs/signature/lib
 -
+
+### Coverage ###
+coverage.html
+coverage.css
+coverage.*.html
+*.gcda
+*.gcno
+*.gcov

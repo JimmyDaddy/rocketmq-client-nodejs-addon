@@ -16,8 +16,11 @@
  */
 #include "push_consumer.h"
 
+#include <atomic>
+#include <cstdlib>
 #include <exception>
 #include <future>
+#include <stdexcept>
 
 #include <napi.h>
 
@@ -25,17 +28,24 @@
 #include <LoggerConfig.h>
 #include <MQMessageListener.h>
 
+#include "addon_data.h"
 #include "consumer_ack.h"
-
-using namespace std;
 
 namespace __node_rocketmq__ {
 
-static void DeleteFunctionReference(Napi::Env, Napi::FunctionReference* data) {
-  delete data;
+#if defined(ROCKETMQ_COVERAGE) || defined(ROCKETMQ_USE_STUB)
+namespace {
+bool IsEnvEnabled(const char* name) {
+  const char* value = std::getenv(name);
+  if (value == nullptr) {
+    return false;
+  }
+  return value[0] != '\0' && value[0] != '0';
 }
+}
+#endif
 
-Napi::Object RocketMQPushConsumer::Init(Napi::Env env, Napi::Object exports) {
+Napi::Object RocketMQPushConsumer::Init(Napi::Env env, Napi::Object exports, AddonData* addon_data) {
   Napi::Function func = DefineClass(
       env,
       "RocketMQPushConsumer",
@@ -48,9 +58,7 @@ Napi::Object RocketMQPushConsumer::Init(Napi::Env env, Napi::Object exports) {
               "setSessionCredentials"),
       });
 
-  Napi::FunctionReference* constructor = new Napi::FunctionReference();
-  *constructor = Napi::Persistent(func);
-  env.SetInstanceData<Napi::FunctionReference, DeleteFunctionReference>(constructor);
+  addon_data->push_consumer_constructor = Napi::Persistent(func);
 
   exports.Set("PushConsumer", func);
   return exports;
@@ -76,7 +84,11 @@ RocketMQPushConsumer::RocketMQPushConsumer(const Napi::CallbackInfo& info)
 }
 
 RocketMQPushConsumer::~RocketMQPushConsumer() {
-  consumer_.shutdown();
+  try {
+    consumer_.shutdown();
+  } catch (const std::exception&) {
+  }
+  listener_.reset();
 }
 
 void RocketMQPushConsumer::SetOptions(const Napi::Object& options) {
@@ -167,12 +179,21 @@ Napi::Value RocketMQPushConsumer::SetSessionCredentials(
 class ConsumerStartWorker : public Napi::AsyncWorker {
  public:
   ConsumerStartWorker(const Napi::Function& callback,
-                      rocketmq::DefaultMQPushConsumer* consumer)
-      : Napi::AsyncWorker(callback), consumer_(consumer) {}
+                      RocketMQPushConsumer* wrapper)
+      : Napi::AsyncWorker(callback),
+        wrapper_ref_(Napi::Persistent(wrapper->Value())),
+        consumer_(&wrapper->consumer_) {}
 
-  void Execute() override { consumer_->start(); }
+  void Execute() override {
+    try {
+      consumer_->start();
+    } catch (const std::exception& e) {
+      SetError(e.what());
+    }
+  }
 
  private:
+  Napi::ObjectReference wrapper_ref_;
   rocketmq::DefaultMQPushConsumer* consumer_;
 };
 
@@ -187,8 +208,7 @@ Napi::Value RocketMQPushConsumer::Start(const Napi::CallbackInfo& info) {
 
   Napi::Function callback = info[0].As<Napi::Function>();
 
-  // AsyncWorker is automatically deleted after execution
-  auto* worker = new ConsumerStartWorker(callback, &consumer_);
+  auto* worker = new ConsumerStartWorker(callback, this);
   worker->Queue();
   return env.Undefined();
 }
@@ -196,12 +216,21 @@ Napi::Value RocketMQPushConsumer::Start(const Napi::CallbackInfo& info) {
 class ConsumerShutdownWorker : public Napi::AsyncWorker {
  public:
   ConsumerShutdownWorker(const Napi::Function& callback,
-                         rocketmq::DefaultMQPushConsumer* consumer)
-      : Napi::AsyncWorker(callback), consumer_(consumer) {}
+                         RocketMQPushConsumer* wrapper)
+      : Napi::AsyncWorker(callback),
+        wrapper_ref_(Napi::Persistent(wrapper->Value())),
+        consumer_(&wrapper->consumer_) {}
 
-  void Execute() override { consumer_->shutdown(); }
+  void Execute() override {
+    try {
+      consumer_->shutdown();
+    } catch (const std::exception& e) {
+      SetError(e.what());
+    }
+  }
 
  private:
+  Napi::ObjectReference wrapper_ref_;
   rocketmq::DefaultMQPushConsumer* consumer_;
 };
 
@@ -216,8 +245,7 @@ Napi::Value RocketMQPushConsumer::Shutdown(const Napi::CallbackInfo& info) {
 
   Napi::Function callback = info[0].As<Napi::Function>();
 
-  // AsyncWorker is automatically deleted after execution
-  auto* worker = new ConsumerShutdownWorker(callback, &consumer_);
+  auto* worker = new ConsumerShutdownWorker(callback, this);
   worker->Queue();
   return env.Undefined();
 }
@@ -258,11 +286,26 @@ void CallConsumerMessageJsListener(Napi::Env env,
                                    Napi::Function listener,
                                    std::nullptr_t*,
                                    MessageAndPromise* data) {
+  std::unique_ptr<MessageAndPromise> data_guard(data);
+#if defined(ROCKETMQ_COVERAGE) || defined(ROCKETMQ_USE_STUB)
+  if (data == nullptr || IsEnvEnabled("ROCKETMQ_STUB_CONSUMER_NULL_DATA")) {
+#else
   if (data == nullptr) {
+#endif
+    if (data != nullptr) {
+      try {
+        data->promise.set_value(false);
+      } catch (const std::future_error&) {
+      }
+    }
     return;
   }
 
+#if defined(ROCKETMQ_COVERAGE) || defined(ROCKETMQ_USE_STUB)
+  if (env == nullptr || listener == nullptr || IsEnvEnabled("ROCKETMQ_STUB_CONSUMER_NULL_ENV")) {
+#else
   if (env == nullptr || listener == nullptr) {
+#endif
     try {
       data->promise.set_value(false);
     } catch (const std::future_error&) {
@@ -270,7 +313,14 @@ void CallConsumerMessageJsListener(Napi::Env env,
     return;
   }
 
+  Napi::HandleScope scope(env);
   try {
+#if defined(ROCKETMQ_COVERAGE) || defined(ROCKETMQ_USE_STUB)
+    if (IsEnvEnabled("ROCKETMQ_STUB_CONSUMER_THROW")) {
+      throw std::runtime_error("consumer stub throw");
+    }
+#endif
+
     Napi::Object message = Napi::Object::New(env);
     message.Set("topic", data->message.topic());
     message.Set("tags", data->message.tags());
@@ -278,27 +328,56 @@ void CallConsumerMessageJsListener(Napi::Env env,
     message.Set("body", data->message.body());
     message.Set("msgId", data->message.msg_id());
 
+#if defined(ROCKETMQ_COVERAGE) || defined(ROCKETMQ_USE_STUB)
+    Napi::Object ack = IsEnvEnabled("ROCKETMQ_STUB_CONSUMER_ACK_EMPTY") ? Napi::Object()
+                                                                        : ConsumerAck::NewInstance(env);
+#else
     Napi::Object ack = ConsumerAck::NewInstance(env);
+#endif
     if (ack.IsEmpty()) {
       data->promise.set_value(false);
       return;
     }
 
+#if defined(ROCKETMQ_COVERAGE) || defined(ROCKETMQ_USE_STUB)
+    ConsumerAck* consumer_ack = IsEnvEnabled("ROCKETMQ_STUB_CONSUMER_ACK_NULL")
+                                    ? nullptr
+                                    : Napi::ObjectWrap<ConsumerAck>::Unwrap(ack);
+#else
     ConsumerAck* consumer_ack = Napi::ObjectWrap<ConsumerAck>::Unwrap(ack);
+#endif
     if (consumer_ack == nullptr) {
       data->promise.set_value(false);
       return;
     }
 
+#if defined(ROCKETMQ_COVERAGE) || defined(ROCKETMQ_USE_STUB)
+    if (IsEnvEnabled("ROCKETMQ_STUB_CONSUMER_PROMISE_SET")) {
+      try {
+        data->promise.set_value(true);
+      } catch (const std::future_error&) {
+      }
+    }
+#endif
+
     consumer_ack->SetPromise(std::move(data->promise));
 
     try {
-      listener.Call(Napi::Object::New(listener.Env()), {message, ack});
-    } catch (const std::exception&) {
-      try {
-        consumer_ack->Done(std::current_exception());
-      } catch (const std::future_error&) {
+#if defined(ROCKETMQ_COVERAGE) || defined(ROCKETMQ_USE_STUB)
+      if (IsEnvEnabled("ROCKETMQ_STUB_CONSUMER_LISTENER_ERROR")) {
+        throw Napi::Error::New(env, "consumer listener error");
       }
+#endif
+      listener.Call(Napi::Object::New(env), {message, ack});
+    } catch (const Napi::Error& e) {
+      consumer_ack->Done(std::current_exception());
+#if defined(ROCKETMQ_COVERAGE) || defined(ROCKETMQ_USE_STUB)
+      if (!IsEnvEnabled("ROCKETMQ_STUB_CONSUMER_LISTENER_ERROR")) {
+        e.ThrowAsJavaScriptException();
+      }
+#else
+      e.ThrowAsJavaScriptException();
+#endif
     }
   } catch (const std::exception&) {
     try {
@@ -312,23 +391,89 @@ class ConsumerMessageListener : public rocketmq::MessageListenerConcurrently {
  public:
   ConsumerMessageListener(Napi::Env& env, Napi::Function&& callback)
       : listener_(
-            Listener::New(env, callback, "RocketMQ Message Listener", 0, 1)) {}
+            Listener::New(env, callback, "RocketMQ Message Listener", 0, 1)),
+        aborted_(false) {}
 
-  ~ConsumerMessageListener() { listener_.Release(); }
+  ~ConsumerMessageListener() {
+    if (!aborted_) {
+      try {
+        listener_.Release();
+#if defined(ROCKETMQ_COVERAGE) || defined(ROCKETMQ_USE_STUB)
+        if (IsEnvEnabled("ROCKETMQ_STUB_CONSUMER_RELEASE_THROW")) {
+          throw std::runtime_error("consumer release throw");
+        }
+#endif
+      } catch (...) {
+      }
+    }
+  }
 
   rocketmq::ConsumeStatus consumeMessage(
       std::vector<rocketmq::MQMessageExt>& msgs) override {
     for (auto& msg : msgs) {
-      MessageAndPromise data{msg, std::promise<bool>()};
-      auto future = data.promise.get_future();
+      auto* data = new MessageAndPromise{msg, std::promise<bool>()};
+      auto future = data->promise.get_future();
 
-      napi_status status = listener_.BlockingCall(&data);
+#if defined(ROCKETMQ_COVERAGE) || defined(ROCKETMQ_USE_STUB)
+      if (IsEnvEnabled("ROCKETMQ_STUB_CONSUMER_PROMISE_PRESET")) {
+        bool preset = !IsEnvEnabled("ROCKETMQ_STUB_CONSUMER_PROMISE_PRESET_FALSE");
+        try {
+          data->promise.set_value(preset);
+          data->promise.set_value(preset);
+        } catch (const std::future_error&) {
+        }
+      }
+
+      if (IsEnvEnabled("ROCKETMQ_STUB_CONSUMER_TIMEOUT_SKIP_CALL")) {
+        std::unique_ptr<MessageAndPromise> data_guard(data);
+        auto wait_time = IsEnvEnabled("ROCKETMQ_STUB_CONSUMER_TIMEOUT")
+                             ? std::chrono::milliseconds(0)
+                             : std::chrono::seconds(30);
+        if (future.wait_for(wait_time) == std::future_status::timeout) {
+          return rocketmq::ConsumeStatus::RECONSUME_LATER;
+        }
+        if (!future.get()) {
+          return rocketmq::ConsumeStatus::RECONSUME_LATER;
+        }
+        continue;
+      }
+#endif
+
+      napi_status status = napi_ok;
+#if defined(ROCKETMQ_COVERAGE) || defined(ROCKETMQ_USE_STUB)
+      if (IsEnvEnabled("ROCKETMQ_STUB_CONSUMER_ABORT_TSFN")) {
+        listener_.Abort();
+        aborted_ = true;
+        status = napi_generic_failure;
+      } else if (IsEnvEnabled("ROCKETMQ_STUB_CONSUMER_BLOCKING_FAIL")) {
+        status = napi_generic_failure;
+      } else {
+        status = listener_.BlockingCall(data);
+      }
+#else
+      status = listener_.BlockingCall(data);
+#endif
       if (status != napi_ok) {
+        delete data;
         return rocketmq::ConsumeStatus::RECONSUME_LATER;
       }
 
       try {
-        if (future.wait_for(std::chrono::seconds(30)) == std::future_status::timeout) {
+#if defined(ROCKETMQ_COVERAGE) || defined(ROCKETMQ_USE_STUB)
+        if (IsEnvEnabled("ROCKETMQ_STUB_CONSUMER_FORCE_FUTURE_ERROR")) {
+          std::promise<bool> probe;
+          auto probe_future = probe.get_future();
+          (void)probe_future;
+          probe.get_future();
+        }
+
+        auto wait_time = IsEnvEnabled("ROCKETMQ_STUB_CONSUMER_TIMEOUT")
+                             ? std::chrono::milliseconds(0)
+                             : std::chrono::seconds(30);
+#else
+        auto wait_time = std::chrono::seconds(30);
+#endif
+        if (future.wait_for(wait_time) == std::future_status::timeout) {
           return rocketmq::ConsumeStatus::RECONSUME_LATER;
         }
         if (!future.get()) {
@@ -350,10 +495,17 @@ class ConsumerMessageListener : public rocketmq::MessageListenerConcurrently {
                                     &CallConsumerMessageJsListener>;
 
   Listener listener_;
+  std::atomic<bool> aborted_;
 };
 
 Napi::Value RocketMQPushConsumer::SetListener(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
+
+  if (info.Length() < 1 || !info[0].IsFunction()) {
+    Napi::TypeError::New(env, "Function expected as first argument").ThrowAsJavaScriptException();
+    return env.Undefined();
+  }
+
   listener_.reset(
       new ConsumerMessageListener(env, info[0].As<Napi::Function>()));
   consumer_.registerMessageListener(listener_.get());

@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   namesrv:
-    image: apache/rocketmq:5.3.2
+    image: apache/rocketmq:5.4.0
     platform: linux/amd64
     container_name: rmqnamesrv
     ports:
@@ -12,7 +12,7 @@ services:
     command: sh mqnamesrv
 
   broker:
-    image: apache/rocketmq:5.3.2
+    image: apache/rocketmq:5.4.0
     platform: linux/amd64
     container_name: rmqbroker
     ports:
@@ -28,7 +28,7 @@ services:
     command: sh mqbroker
 
   proxy:
-    image: apache/rocketmq:5.3.2
+    image: apache/rocketmq:5.4.0
     platform: linux/amd64
     container_name: rmqproxy
     networks:

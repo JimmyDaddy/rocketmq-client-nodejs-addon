@@ -36,7 +36,7 @@ else()
     set(ROCKETMQ_LIB ${CMAKE_CURRENT_SOURCE_DIR}/deps/rocketmq/bin/librocketmq.a)
 endif()
 
-file(GLOB SOURCE_FILES "src/*.cpp")
+file(GLOB SOURCE_FILES "lib/*.cpp")
 add_library(${PROJECT_NAME} SHARED ${SOURCE_FILES})
 set_target_properties(${PROJECT_NAME} PROPERTIES PREFIX "" SUFFIX ".node")
 set_target_properties(${PROJECT_NAME}
@@ -46,8 +46,8 @@ set_target_properties(${PROJECT_NAME}
         ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/build")
 target_link_libraries(${PROJECT_NAME} ${ROCKETMQ_LIB})
 
-set(CMAKE_DEPENDS_USE_COMPILER FALSE)
-set(CMAKE_SKIP_DEPENDENCY_TRACKING TRUE)
+# Keep CMake dependency tracking enabled to avoid missing compiler_depend.ts with newer CMake
+# versions when using Makefile generators.
 
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -std=c++11")

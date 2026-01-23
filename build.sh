@@ -178,19 +178,45 @@ build_local_host() {
             error "当前 Linux 架构不支持快速构建: $HOST_ARCH"
             return 1
         fi
+
+        (
+            rm -rf build/
+            npm install --no-audit --prefer-offline
+            ./deps/rocketmq/build.sh
+            npx cmake-js compile --CDCMAKE_BUILD_TYPE=Release
+            strip -s build/rocketmq.node 2>/dev/null || true
+            cp build/rocketmq.node "$RELEASE_DIR/$artifact_name"
+        ) 2>&1 | tee "$log_file"
+
+    elif [[ "$HOST_OS" == "macos" ]]; then
+        local osx_arch=""
+        if [[ "$HOST_ARCH" == "amd64" ]]; then
+            osx_arch="x86_64"
+            artifact_name="darwin-x86_64-rocketmq.node"
+        elif [[ "$HOST_ARCH" == "arm64" ]]; then
+            osx_arch="arm64"
+            artifact_name="darwin-arm64-rocketmq.node"
+        else
+            error "当前 macOS 架构不支持快速构建: $HOST_ARCH"
+            return 1
+        fi
+
+        (
+            rm -rf build/
+            npm install --no-audit --prefer-offline
+            ./deps/rocketmq/build.sh
+            npx cmake-js compile --CDCMAKE_BUILD_TYPE=Release \
+                --CDCMAKE_OSX_ARCHITECTURES="$osx_arch" \
+                --CDCMAKE_OSX_DEPLOYMENT_TARGET=11 \
+                --CDCMAKE_SKIP_DEPENDENCY_TRACKING=ON
+            strip -S -x build/rocketmq.node 2>/dev/null || true
+            cp build/rocketmq.node "$RELEASE_DIR/$artifact_name"
+        ) 2>&1 | tee "$log_file"
+
     else
-        error "快速构建仅支持 Linux 主机"
+        error "快速构建仅支持 macOS 或 Linux 主机"
         return 1
     fi
-
-    (
-        rm -rf build/
-        npm install --no-audit --prefer-offline
-        ./deps/rocketmq/build.sh
-        npx cmake-js compile --CDCMAKE_BUILD_TYPE=Release
-        strip -s build/rocketmq.node 2>/dev/null || true
-        cp build/rocketmq.node "$RELEASE_DIR/$artifact_name"
-    ) 2>&1 | tee "$log_file"
 
     if [[ -f "$RELEASE_DIR/$artifact_name" ]]; then
         success "本地快速构建完成: $artifact_name"
@@ -215,7 +241,7 @@ show_help() {
     linux-native  仅构建当前架构的 Linux 目标 (快)
     linux-cross   仅构建交叉架构的 Linux 目标 (慢)
     macos         构建 macOS Universal
-    local         本地快速构建当前 Linux 架构（无 act/docker）
+    local         本地快速构建当前主机架构（macOS/Linux，无 act/docker）
 
     linux-gnu-x64     单独构建 linux-gnu-x64
     linux-gnu-arm64   单独构建 linux-gnu-arm64
@@ -229,7 +255,7 @@ show_help() {
     $0 linux-native       # 仅构建当前架构
     $0 linux-gnu-x64      # 仅构建指定目标
     $0 macos              # 仅构建 macOS
-    $0 local              # 本地快速构建当前 Linux 架构
+    $0 local              # 本地快速构建当前架构
 EOF
 }
 
@@ -261,7 +287,7 @@ main() {
             build_linux_emulated
             ;;
         local)
-            info "=== 本地快速构建（当前 Linux 架构） ==="
+            info "=== 本地快速构建（当前主机架构） ==="
             build_local_host
             ;;
         macos)

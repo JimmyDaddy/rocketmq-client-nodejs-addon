@@ -27,15 +27,14 @@
     "build:native": "cmake-js build",
     "build:native:test": "cmake-js rebuild --CDROCKETMQ_USE_STUB=ON --CDROCKETMQ_ENABLE_COVERAGE=ON",
     "build:ts": "tsc",
-    "build:test:ts": "tsc --project tsconfig.test.json",
     "build:dev": "npm run build:native && npm run build:ts",
-    "build:test": "npm run build:native:test && npm run build:ts && npm run build:test:ts",
+    "build:test": "npm run build:native:test && npm run build:ts",
     "build:coverage": "cmake-js rebuild",
     "prepublishOnly": "npm run build",
-    "test": "npm run build:test && node --expose-gc --test --test-force-exit dist-test/test/**/*.test.js",
-    "test:dev": "npm run build:dev && npm run build:test:ts && node --expose-gc --test --test-force-exit dist-test/test/**/*.test.js",
+    "test": "npm run build:test && node --expose-gc --test --test-force-exit",
+    "test:dev": "npm run build:dev && npm run build:test:ts && node --expose-gc --test --test-force-exit",
     "test:coverage": "npm run build:coverage && npm run build:ts && npm run build:test:ts && node --expose-gc --test --test-force-exit dist-test/test/**/*.test.js && gcovr -r . --filter src --exclude test --print-summary",
-    "clean:ts": "tsc -b --clean && tsc -b --clean tsconfig.test.json"
+    "clean:ts": "tsc -b --clean"
   },
   "dependencies": {
     "bindings": "^1.5.0"

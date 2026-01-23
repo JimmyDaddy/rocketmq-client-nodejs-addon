@@ -262,3 +262,5 @@ export class RocketMQPushConsumer extends EventEmitter {
     this.core.subscribe(topic, expression);
   }
 }
+
+module.exports = RocketMQPushConsumer;

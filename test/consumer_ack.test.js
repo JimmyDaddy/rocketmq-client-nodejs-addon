@@ -10,7 +10,7 @@ const rootDir = path.join(__dirname, '..');
 process.env.NODE_BINDINGS_COMPILED_DIR = 'build';
 ensureBindingBinary(rootDir);
 
-const PushConsumer = require('../lib/push_consumer');
+const PushConsumer = require('../dist/consumer');
 
 test.afterEach(() => {
   if (global.gc) {

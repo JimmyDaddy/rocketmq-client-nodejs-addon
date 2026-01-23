@@ -15,7 +15,7 @@ function runInitWithEnv(extraEnv) {
   const env = { ...process.env, ...extraEnv, NODE_BINDINGS_COMPILED_DIR: 'build' };
   return childProcess.execFileSync(
     process.execPath,
-    ['-e', "require('./lib/binding')"],
+    ['-e', "require('./dist/binding')"],
     { cwd: rootDir, env }
   );
 }

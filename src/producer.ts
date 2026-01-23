@@ -295,3 +295,5 @@ export class RocketMQProducer {
 
   static SEND_RESULT = SendResultStatus;
 }
+
+module.exports = RocketMQProducer;

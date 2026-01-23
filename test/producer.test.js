@@ -10,7 +10,7 @@ const rootDir = path.join(__dirname, '..');
 process.env.NODE_BINDINGS_COMPILED_DIR = 'build';
 ensureBindingBinary(rootDir);
 
-const RocketMQProducer = require('../lib/producer');
+const RocketMQProducer = require('../dist/producer');
 
 function setEnv(env) {
   const original = {};
@@ -70,25 +70,25 @@ test('Producer setSessionCredentials tests', { concurrency: 1 }, async (t) => {
     assert.strictEqual(result, true);
   });
 
-  await t.test('throws on invalid accessKey', () => {
+  await t.test('throws on invalid accessKey', async () => {
     const producer = new RocketMQProducer('test-group');
-    assert.throws(() => {
-      producer.setSessionCredentials(123, 'secretKey', 'channel');
-    }, /AssertionError/);
+    await assert.rejects(async () => {
+      await producer.setSessionCredentials(123, 'secretKey', 'channel');
+    }, /TypeError: accessKey must be a string/);
   });
 
-  await t.test('throws on invalid secretKey', () => {
+  await t.test('throws on invalid secretKey', async () => {
     const producer = new RocketMQProducer('test-group');
-    assert.throws(() => {
-      producer.setSessionCredentials('accessKey', 123, 'channel');
-    }, /AssertionError/);
+    await assert.rejects(async () => {
+      await producer.setSessionCredentials('accessKey', 123, 'channel');
+    }, /TypeError: secretKey must be a string/);
   });
 
-  await t.test('throws on invalid channel', () => {
+  await t.test('throws on invalid channel', async () => {
     const producer = new RocketMQProducer('test-group');
-    assert.throws(() => {
-      producer.setSessionCredentials('accessKey', 'secretKey', 123);
-    }, /AssertionError/);
+    await assert.rejects(async () => {
+      await producer.setSessionCredentials('accessKey', 'secretKey', 123);
+    }, /TypeError: onsChannel must be a string/);
   });
 });
 
@@ -272,9 +272,9 @@ test('Producer start/shutdown lifecycle tests', { concurrency: 1 }, async (t) =>
     try {
       producer = new RocketMQProducer('test-group');
       await producer.start();
-      assert.throws(() => {
-        producer.start();
-      }, /AssertionError/);
+      await assert.rejects(async () => {
+        await producer.start();
+      }, /Error: Producer is already started/);
     } finally {
       if (producer && producer.status === 1) {
         await producer.shutdown();
@@ -287,9 +287,9 @@ test('Producer start/shutdown lifecycle tests', { concurrency: 1 }, async (t) =>
     const original = setEnv(baseEnv);
     try {
       const producer = new RocketMQProducer('test-group');
-      assert.throws(() => {
-        producer.shutdown();
-      }, /AssertionError/);
+      await assert.rejects(async () => {
+        await producer.shutdown();
+      }, /Error: Producer is already stopped/);
     } finally {
       restoreEnv(baseEnv, original);
     }
@@ -551,7 +551,7 @@ test('Producer send tests', { concurrency: 1 }, async (t) => {
       await producer.start();
       assert.throws(() => {
         producer.send(123, 'body');
-      }, /AssertionError/);
+      }, /TypeError: topic must be a string/);
     } finally {
       if (producer && producer.status === 1) {
         await producer.shutdown();
@@ -568,7 +568,7 @@ test('Producer send tests', { concurrency: 1 }, async (t) => {
       await producer.start();
       assert.throws(() => {
         producer.send('topic', 123);
-      }, /AssertionError/);
+      }, /TypeError: body must be a string or Buffer/);
     } finally {
       if (producer && producer.status === 1) {
         await producer.shutdown();
@@ -588,7 +588,7 @@ test('Producer static properties', { concurrency: 1 }, async (t) => {
 });
 
 test('Producer C++ binding coverage tests', { concurrency: 1 }, async (t) => {
-  const binding = require('../lib/binding');
+  const binding = require('../dist/binding');
   const baseEnv = {
     ROCKETMQ_STUB_PRODUCER_START_ERROR: undefined,
     ROCKETMQ_STUB_PRODUCER_SHUTDOWN_ERROR: undefined,

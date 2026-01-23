@@ -115,4 +115,8 @@ export interface NativeBinding {
   PushConsumer: new (groupId: string, instanceName?: string | null, options?: Record<string, any>) => NativePushConsumer;
 }
 
-export default loadBinding();
+const nativeBinding: NativeBinding = loadBinding();
+
+export default nativeBinding;
+
+module.exports = nativeBinding;

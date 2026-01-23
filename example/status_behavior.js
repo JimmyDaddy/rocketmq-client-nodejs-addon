@@ -1,5 +1,5 @@
-const { RocketMQProducer } = require('../dist/producer');
-const { Status } = require('../dist/contants');
+const { RocketMQProducer } = require('../src/producer');
+const { Status } = require('../src/constants');
 
 async function demonstrateStatusBehavior() {
   const producer = new RocketMQProducer('demo-group');

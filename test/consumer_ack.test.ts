@@ -11,7 +11,7 @@ ensureBindingBinary(rootDir);
 
 // Import from compiled dist for native binding compatibility
 import { RocketMQPushConsumer } from '../src/consumer';
-import { Status } from '../src/contants';
+import { Status } from '../src/constants';
 
 afterEach(() => {
   if ((global as any).gc) {

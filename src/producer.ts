@@ -1,5 +1,5 @@
 import binding, { NativeProducer } from './binding';
-import { LogLevel, Status } from './contants';
+import { LogLevel, Status } from './constants';
 
 const START_OR_SHUTDOWN = Symbol('RocketMQProducer#startOrShutdown');
 

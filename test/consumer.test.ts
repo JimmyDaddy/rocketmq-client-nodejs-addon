@@ -2,7 +2,7 @@
 
 import { describe, test, expect } from 'vitest';
 import * as path from 'path';
-import { LogLevel, Status } from '../dist/contants';
+import { LogLevel, Status } from '../src/constants';
 
 import { ensureBindingBinary } from './helpers/binding';
 

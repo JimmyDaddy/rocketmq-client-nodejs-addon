@@ -11,7 +11,7 @@ ensureBindingBinary(rootDir);
 
 // Import from compiled dist for native binding compatibility
 import { RocketMQProducer } from '../src/producer';
-import { Status, LogLevel } from '../src/contants';
+import { Status, LogLevel } from '../src/constants';
 import binding from '../src/binding';
 
 

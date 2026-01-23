@@ -10,9 +10,9 @@ process.env.NODE_BINDINGS_COMPILED_DIR = 'build';
 ensureBindingBinary(rootDir);
 
 // Import from compiled dist for native binding compatibility
-import { RocketMQProducer } from '../dist/producer';
-import { RocketMQPushConsumer } from '../dist/consumer';
-import { Status } from '../dist/contants';
+import { RocketMQProducer } from '../src/producer';
+import { RocketMQPushConsumer } from '../src/consumer';
+import { Status } from '../src/constants';
 
 function setEnv(env: Record<string, string | undefined>): Record<string, string | undefined> {
   const original: Record<string, string | undefined> = {};

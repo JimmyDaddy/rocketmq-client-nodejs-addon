@@ -1,25 +1,26 @@
 'use strict';
 
-const test = require('node:test');
-const assert = require('assert');
-const path = require('path');
+import { describe, test, expect, afterEach } from 'vitest';
+import * as path from 'path';
 
-const { ensureBindingBinary } = require('./helpers/binding');
+import { ensureBindingBinary } from './helpers/binding';
 
 const rootDir = path.join(__dirname, '..');
 process.env.NODE_BINDINGS_COMPILED_DIR = 'build';
 ensureBindingBinary(rootDir);
 
-const PushConsumer = require('../lib/push_consumer');
+// Import from compiled dist for native binding compatibility
+import { RocketMQPushConsumer } from '../src/consumer';
+import { Status } from '../src/constants';
 
-test.afterEach(() => {
-  if (global.gc) {
-    global.gc();
+afterEach(() => {
+  if ((global as any).gc) {
+    (global as any).gc();
   }
 });
 
-function setEnv(env) {
-  const original = {};
+function setEnv(env: Record<string, string | undefined>): Record<string, string | undefined> {
+  const original: Record<string, string | undefined> = {};
   for (const key of Object.keys(env)) {
     original[key] = process.env[key];
     if (env[key] === undefined) {
@@ -31,7 +32,7 @@ function setEnv(env) {
   return original;
 }
 
-function restoreEnv(env, original) {
+function restoreEnv(env: Record<string, string | undefined>, original: Record<string, string | undefined>): void {
   for (const key of Object.keys(env)) {
     if (original[key] === undefined) {
       delete process.env[key];
@@ -42,22 +43,22 @@ function restoreEnv(env, original) {
 }
 
 
-test('ConsumerAck tests', { concurrency: 1 }, async (t) => {
+describe('ConsumerAck tests', () => {
   const baseEnv = {
     ROCKETMQ_STUB_CONSUMER_START_ERROR: undefined,
     ROCKETMQ_STUB_CONSUMER_SHUTDOWN_ERROR: undefined,
     ROCKETMQ_STUB_CONSUME_MESSAGE: '1'
   };
 
-  await t.test('done() with true acks message', async () => {
+  test('done() with true acks message', async () => {
     const original = setEnv(baseEnv);
-    let consumer;
+    let consumer: any;
     try {
-      consumer = new PushConsumer('test-group', {});
+      consumer = new RocketMQPushConsumer('test-group', {});
       consumer.subscribe('test-topic', '*');
 
       const messagePromise = new Promise((resolve) => {
-        consumer.once('message', (msg, ack) => {
+        consumer.once('message', (_msg: any, ack: any) => {
           ack.done(true);
           resolve(true);
         });
@@ -65,24 +66,24 @@ test('ConsumerAck tests', { concurrency: 1 }, async (t) => {
 
       await consumer.start();
       const ackCalled = await messagePromise;
-      assert.strictEqual(ackCalled, true);
+      expect(ackCalled).toBe(true);
     } finally {
-      if (consumer && consumer.status === 1) {
+      if (consumer && consumer.status === Status.STARTED) {
         await consumer.shutdown();
       }
       restoreEnv(baseEnv, original);
     }
   });
 
-  await t.test('done() with false nacks message', async () => {
+  test('done() with false nacks message', async () => {
     const original = setEnv(baseEnv);
-    let consumer;
+    let consumer: any;
     try {
-      consumer = new PushConsumer('test-group', {});
+      consumer = new RocketMQPushConsumer('test-group', {});
       consumer.subscribe('test-topic', '*');
 
       const messagePromise = new Promise((resolve) => {
-        consumer.once('message', (msg, ack) => {
+        consumer.once('message', (msg: any, ack: any) => {
           ack.done(false);
           resolve(false);
         });
@@ -90,24 +91,24 @@ test('ConsumerAck tests', { concurrency: 1 }, async (t) => {
 
       await consumer.start();
       const ackValue = await messagePromise;
-      assert.strictEqual(ackValue, false);
+      expect(ackValue).toBe(false);
     } finally {
-      if (consumer && consumer.status === 1) {
+      if (consumer && consumer.status === Status.STARTED) {
         await consumer.shutdown();
       }
       restoreEnv(baseEnv, original);
     }
   });
 
-  await t.test('done() with no argument defaults to true', async () => {
+  test('done() with no argument defaults to true', async () => {
     const original = setEnv(baseEnv);
-    let consumer;
+    let consumer: any;
     try {
-      consumer = new PushConsumer('test-group', {});
+      consumer = new RocketMQPushConsumer('test-group', {});
       consumer.subscribe('test-topic', '*');
 
       const messagePromise = new Promise((resolve) => {
-        consumer.once('message', (msg, ack) => {
+        consumer.once('message', (msg: any, ack: any) => {
           ack.done();
           resolve(true);
         });
@@ -115,25 +116,25 @@ test('ConsumerAck tests', { concurrency: 1 }, async (t) => {
 
       await consumer.start();
       const doneCalled = await messagePromise;
-      assert.strictEqual(doneCalled, true);
+      expect(doneCalled).toBe(true);
     } finally {
-      if (consumer && consumer.status === 1) {
+      if (consumer && consumer.status === Status.STARTED) {
         await consumer.shutdown();
       }
       restoreEnv(baseEnv, original);
     }
   });
 
-  await t.test('done() is idempotent - second call is ignored', async () => {
+  test('done() is idempotent - second call is ignored', async () => {
     const original = setEnv(baseEnv);
-    let consumer;
+    let consumer: any;
     try {
-      consumer = new PushConsumer('test-group', {});
+      consumer = new RocketMQPushConsumer('test-group', {});
       consumer.subscribe('test-topic', '*');
 
       const messagePromise = new Promise((resolve) => {
         let callCount = 0;
-        consumer.once('message', (msg, ack) => {
+        consumer.once('message', (msg: any, ack: any) => {
           ack.done(true);
           ack.done(false);
           ack.done(true);
@@ -144,24 +145,24 @@ test('ConsumerAck tests', { concurrency: 1 }, async (t) => {
 
       await consumer.start();
       const callCount = await messagePromise;
-      assert.strictEqual(callCount, 1);
+      expect(callCount).toBe(1);
     } finally {
-      if (consumer && consumer.status === 1) {
+      if (consumer && consumer.status === Status.STARTED) {
         await consumer.shutdown();
       }
       restoreEnv(baseEnv, original);
     }
   });
 
-  await t.test('done() with undefined is treated as true', async () => {
+  test('done() with undefined is treated as true', async () => {
     const original = setEnv(baseEnv);
-    let consumer;
+    let consumer: any;
     try {
-      consumer = new PushConsumer('test-group', {});
+      consumer = new RocketMQPushConsumer('test-group', {});
       consumer.subscribe('test-topic', '*');
 
       const messagePromise = new Promise((resolve) => {
-        consumer.once('message', (msg, ack) => {
+        consumer.once('message', (msg: any, ack: any) => {
           ack.done(undefined);
           resolve(true);
         });
@@ -169,20 +170,20 @@ test('ConsumerAck tests', { concurrency: 1 }, async (t) => {
 
       await consumer.start();
       const doneCalled = await messagePromise;
-      assert.strictEqual(doneCalled, true);
+      expect(doneCalled).toBe(true);
     } finally {
-      if (consumer && consumer.status === 1) {
+      if (consumer && consumer.status === Status.STARTED) {
         await consumer.shutdown();
       }
       restoreEnv(baseEnv, original);
     }
   });
 
-  await t.test('handles listener exception via Done(exception_ptr)', async () => {
+  test('handles listener exception via Done(exception_ptr)', async () => {
     const original = setEnv(baseEnv);
-    let consumer;
+    let consumer: any;
     try {
-      consumer = new PushConsumer('test-group', {});
+      consumer = new RocketMQPushConsumer('test-group', {});
       consumer.subscribe('test-topic', '*');
 
       const messagePromise = new Promise((resolve) => {
@@ -194,24 +195,24 @@ test('ConsumerAck tests', { concurrency: 1 }, async (t) => {
 
       await consumer.start();
       const listenerCalled = await messagePromise;
-      assert.strictEqual(listenerCalled, true);
+      expect(listenerCalled).toBe(true);
     } finally {
-      if (consumer && consumer.status === 1) {
+      if (consumer && consumer.status === Status.STARTED) {
         await consumer.shutdown();
       }
       restoreEnv(baseEnv, original);
     }
   });
 
-  await t.test('done() then throw is idempotent (tests Done exception_ptr early return)', async () => {
+  test('done() then throw is idempotent (tests Done exception_ptr early return)', async () => {
     const original = setEnv(baseEnv);
-    let consumer;
+    let consumer: any;
     try {
-      consumer = new PushConsumer('test-group', {});
+      consumer = new RocketMQPushConsumer('test-group', {});
       consumer.subscribe('test-topic', '*');
 
       const messagePromise = new Promise((resolve) => {
-        consumer.once('message', (msg, ack) => {
+        consumer.once('message', (msg: any, ack: any) => {
           ack.done(true);
           resolve(true);
           throw new Error('error after done');
@@ -220,23 +221,23 @@ test('ConsumerAck tests', { concurrency: 1 }, async (t) => {
 
       await consumer.start();
       const doneCalled = await messagePromise;
-      assert.strictEqual(doneCalled, true);
+      expect(doneCalled).toBe(true);
     } finally {
-      if (consumer && consumer.status === 1) {
+      if (consumer && consumer.status === Status.STARTED) {
         await consumer.shutdown();
       }
       restoreEnv(baseEnv, original);
     }
   });
 
-  await t.test('NewInstance returns empty when addon_data is null (coverage branch)', async () => {
+  test('NewInstance returns empty when addon_data is null (coverage branch)', async () => {
     const original = setEnv({
       ...baseEnv,
       ROCKETMQ_STUB_CONSUMER_ACK_NULL_ADDON_DATA: '1'
     });
-    let consumer;
+    let consumer: any;
     try {
-      consumer = new PushConsumer('test-group', {});
+      consumer = new RocketMQPushConsumer('test-group', {});
       consumer.subscribe('test-topic', '*');
 
       const messagePromise = new Promise((resolve, reject) => {
@@ -253,9 +254,9 @@ test('ConsumerAck tests', { concurrency: 1 }, async (t) => {
 
       await consumer.start();
       const result = await messagePromise;
-      assert.ok(['timeout', 'error'].includes(result) || result === 'message');
+      expect(['timeout', 'error', 'message']).toContain(result);
     } finally {
-      if (consumer && consumer.status === 1) {
+      if (consumer && consumer.status === Status.STARTED) {
         await consumer.shutdown();
       }
       restoreEnv({
@@ -265,18 +266,18 @@ test('ConsumerAck tests', { concurrency: 1 }, async (t) => {
     }
   });
 
-  await t.test('done() catches future_error when promise already set (coverage branch)', async () => {
+  test('done() catches future_error when promise already set (coverage branch)', async () => {
     const original = setEnv({
       ...baseEnv,
       ROCKETMQ_STUB_CONSUMER_ACK_FORCE_FUTURE_ERROR: '1'
     });
-    let consumer;
+    let consumer: any;
     try {
-      consumer = new PushConsumer('test-group', {});
+      consumer = new RocketMQPushConsumer('test-group', {});
       consumer.subscribe('test-topic', '*');
 
       const messagePromise = new Promise((resolve) => {
-        consumer.once('message', (msg, ack) => {
+        consumer.once('message', (msg: any, ack: any) => {
           ack.done(true);
           resolve(true);
         });
@@ -284,9 +285,9 @@ test('ConsumerAck tests', { concurrency: 1 }, async (t) => {
 
       await consumer.start();
       const doneCalled = await messagePromise;
-      assert.strictEqual(doneCalled, true);
+      expect(doneCalled).toBe(true);
     } finally {
-      if (consumer && consumer.status === 1) {
+      if (consumer && consumer.status === Status.STARTED) {
         await consumer.shutdown();
       }
       restoreEnv({
@@ -296,7 +297,7 @@ test('ConsumerAck tests', { concurrency: 1 }, async (t) => {
     }
   });
 
-  await t.test('IsEnvEnabled returns false for empty string env var (coverage branch)', async () => {
+  test('IsEnvEnabled returns false for empty string env var (coverage branch)', async () => {
     // This test covers the branch in IsEnvEnabled where value[0] == '\0'
     // When ROCKETMQ_STUB_CONSUMER_ACK_FORCE_FUTURE_ERROR is set to empty string,
     // IsEnvEnabled returns false, so the stub code path is NOT taken
@@ -304,13 +305,13 @@ test('ConsumerAck tests', { concurrency: 1 }, async (t) => {
       ...baseEnv,
       ROCKETMQ_STUB_CONSUMER_ACK_FORCE_FUTURE_ERROR: ''
     });
-    let consumer;
+    let consumer: any;
     try {
-      consumer = new PushConsumer('test-group', {});
+      consumer = new RocketMQPushConsumer('test-group', {});
       consumer.subscribe('test-topic', '*');
 
       const messagePromise = new Promise((resolve) => {
-        consumer.once('message', (msg, ack) => {
+        consumer.once('message', (msg: any, ack: any) => {
           ack.done(true);
           resolve(true);
         });
@@ -318,9 +319,9 @@ test('ConsumerAck tests', { concurrency: 1 }, async (t) => {
 
       await consumer.start();
       const doneCalled = await messagePromise;
-      assert.strictEqual(doneCalled, true);
+      expect(doneCalled).toBe(true);
     } finally {
-      if (consumer && consumer.status === 1) {
+      if (consumer && consumer.status === Status.STARTED) {
         await consumer.shutdown();
       }
       restoreEnv({
@@ -330,20 +331,20 @@ test('ConsumerAck tests', { concurrency: 1 }, async (t) => {
     }
   });
 
-  await t.test('IsEnvEnabled returns false for "0" env var (coverage branch)', async () => {
+  test('IsEnvEnabled returns false for "0" env var (coverage branch)', async () => {
     // This test covers the branch in IsEnvEnabled where value[0] == '0'
     // When env var is set to "0", IsEnvEnabled returns false
     const original = setEnv({
       ...baseEnv,
       ROCKETMQ_STUB_CONSUMER_ACK_FORCE_FUTURE_ERROR: '0'
     });
-    let consumer;
+    let consumer: any;
     try {
-      consumer = new PushConsumer('test-group', {});
+      consumer = new RocketMQPushConsumer('test-group', {});
       consumer.subscribe('test-topic', '*');
 
       const messagePromise = new Promise((resolve) => {
-        consumer.once('message', (msg, ack) => {
+        consumer.once('message', (msg: any, ack: any) => {
           ack.done(true);
           resolve(true);
         });
@@ -351,9 +352,9 @@ test('ConsumerAck tests', { concurrency: 1 }, async (t) => {
 
       await consumer.start();
       const doneCalled = await messagePromise;
-      assert.strictEqual(doneCalled, true);
+      expect(doneCalled).toBe(true);
     } finally {
-      if (consumer && consumer.status === 1) {
+      if (consumer && consumer.status === Status.STARTED) {
         await consumer.shutdown();
       }
       restoreEnv({
@@ -363,7 +364,7 @@ test('ConsumerAck tests', { concurrency: 1 }, async (t) => {
     }
   });
 
-  await t.test('Done(exception_ptr) early return and Done() future_error (coverage branch)', async () => {
+  test('Done(exception_ptr) early return and Done() future_error (coverage branch)', async () => {
     // To cover line 72: Done(exception_ptr) must see done_called_ as true.
     // To cover line 98: Done() must catch std::future_error when ROCKETMQ_STUB_CONSUMER_ACK_FORCE_FUTURE_ERROR is set.
     // We can use ROCKETMQ_STUB_CONSUMER_PROMISE_SET to set the promise early.
@@ -372,13 +373,13 @@ test('ConsumerAck tests', { concurrency: 1 }, async (t) => {
       ROCKETMQ_STUB_CONSUMER_ACK_FORCE_FUTURE_ERROR: '1',
       ROCKETMQ_STUB_CONSUMER_PROMISE_SET: '1'
     });
-    let consumer;
+    let consumer: any;
     try {
-      consumer = new PushConsumer('test-group', {});
+      consumer = new RocketMQPushConsumer('test-group', {});
       consumer.subscribe('test-topic', '*');
 
       const messagePromise = new Promise((resolve) => {
-        consumer.once('message', (msg, ack) => {
+        consumer.once('message', (msg: any, ack: any) => {
           // 1. data->promise is already set due to ROCKETMQ_STUB_CONSUMER_PROMISE_SET
           // 2. ack.done(true) will try to set it again, triggering future_error in line 96, hitting line 98.
           // 3. ack.done(true) sets done_called_ to true.
@@ -393,7 +394,7 @@ test('ConsumerAck tests', { concurrency: 1 }, async (t) => {
       await consumer.start();
       await messagePromise;
     } finally {
-      if (consumer && consumer.status === 1) {
+      if (consumer && consumer.status === Status.STARTED) {
         await consumer.shutdown();
       }
       restoreEnv({

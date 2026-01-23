@@ -1,14 +1,12 @@
 {
   "name": "rocketmq-nodejs",
-  "version": "1.0.5",
+  "version": "1.1.0",
   "description": "Apache RocketMQ Client for Node.js",
-  "main": "index.js",
-  "types": "index.d.ts",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
   "files": [
-    "lib",
-    "Release",
-    "index.js",
-    "index.d.ts"
+    "dist",
+    "Release"
   ],
   "os": [
     "darwin",
@@ -25,16 +23,33 @@
     ]
   },
   "scripts": {
-    "build": "cmake-js build",
-    "build:coverage": "cmake-js rebuild --CDROCKETMQ_ENABLE_COVERAGE=ON --CDROCKETMQ_USE_STUB=ON",
-    "test": "node --expose-gc --test --test-force-exit",
-    "test:coverage": "npm run build:coverage && node --expose-gc --test --test-force-exit && gcovr -r . --filter src --exclude test --print-summary"
+    "build": "npm run build:native && npm run build:ts",
+    "build:native": "cmake-js build",
+    "build:native:test": "cmake-js rebuild --CDROCKETMQ_USE_STUB=ON --CDROCKETMQ_ENABLE_COVERAGE=ON",
+    "build:ts": "tsc",
+    "build:dev": "npm run build:native && npm run build:ts",
+    "build:test": "npm run build:native:test && npm run build:ts",
+    "build:coverage": "cmake-js rebuild",
+    "prepublishOnly": "npm run build",
+    "vitest": "vitest run --reporter=verbose",
+    "vitest:coverage": "vitest run --coverage --reporter=verbose",
+    "test": "npm run build:test && npm run vitest",
+    "test:dryrun": "npm run build:ts && npm run vitest",
+    "test:dev": "npm run build:dev && node --expose-gc --max-old-space-size=4096 vitest",
+    "test:coverage": "npm run build:test && npm run vitest:coverage",
+    "test:watch": "npm run build:ts && vitest --watch",
+    "clean:ts": "tsc -b --clean"
   },
   "dependencies": {
     "bindings": "^1.5.0"
   },
   "devDependencies": {
+    "@types/bindings": "^1.5.5",
+    "@types/node": "^22.10.5",
+    "@vitest/coverage-v8": "^4.0.18",
+    "cmake-js": "^7.4.0",
     "node-addon-api": "^8.5.0",
-    "cmake-js": "^7.4.0"
+    "typescript": "^5.7.2",
+    "vitest": "^4.0.18"
   }
 }

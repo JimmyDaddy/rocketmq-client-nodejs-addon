@@ -216,3 +216,8 @@ coverage.*.html
 *.gcda
 *.gcno
 *.gcov
+
+### TypeScript ###
+dist/
+*.tsbuildinfo
+*.test.js.map

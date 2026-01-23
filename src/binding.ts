@@ -119,4 +119,6 @@ const nativeBinding: NativeBinding = loadBinding();
 
 export default nativeBinding;
 
-module.exports = nativeBinding;
+// CommonJS compatibility
+// module.exports = nativeBinding;
+// module.exports.default = nativeBinding;

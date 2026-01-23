@@ -1,5 +1,6 @@
-export { RocketMQProducer, SendResultStatus, LogLevel as ProducerLogLevel, ProducerOptions, SendOptions, SendResult } from './producer';
-export { RocketMQPushConsumer, LogLevel as ConsumerLogLevel, PushConsumerOptions, Message, ConsumerAck } from './consumer';
+export { RocketMQProducer, SendResultStatus, ProducerOptions, SendOptions, SendResult } from './producer';
+export { RocketMQPushConsumer, PushConsumerOptions, Message, ConsumerAck } from './consumer';
+export { LogLevel, Status } from './contants';
 
 import { RocketMQProducer } from './producer';
 import { RocketMQPushConsumer } from './consumer';

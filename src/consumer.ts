@@ -1,24 +1,8 @@
 import { EventEmitter } from 'events';
 import binding, { NativePushConsumer } from './binding';
+import { LogLevel, Status } from './contants';
 
 const START_OR_SHUTDOWN = Symbol('RocketMQPushConsumer#startOrShutdown');
-
-enum StartStatus {
-  STOPPED = 0,
-  STARTED = 1,
-  STOPPING = 2,
-  STARTING = 3,
-}
-
-export enum LogLevel {
-  FATAL = 1,
-  ERROR = 2,
-  WARN = 3,
-  INFO = 4,
-  DEBUG = 5,
-  TRACE = 6,
-  NUM = 7,
-}
 
 export interface PushConsumerOptions {
   nameServer?: string;
@@ -66,8 +50,8 @@ export declare interface RocketMQPushConsumer {
 }
 
 export class RocketMQPushConsumer extends EventEmitter {
-  private core: NativePushConsumer;
-  public status: StartStatus;
+  public core: NativePushConsumer;
+  public status: Status;
   private operationQueue: Promise<void>;
 
   /**
@@ -114,7 +98,7 @@ export class RocketMQPushConsumer extends EventEmitter {
         }
       }
     });
-    this.status = StartStatus.STOPPED;
+    this.status = Status.STOPPED;
     this.operationQueue = Promise.resolve();
   }
 
@@ -132,6 +116,16 @@ export class RocketMQPushConsumer extends EventEmitter {
     
     this.core.setSessionCredentials(accessKey, secretKey, onsChannel);
     return true;
+  }
+
+  private getStatusName(status: Status = this.status): string {
+    switch (status) {
+      case Status.STOPPED: return 'STOPPED';
+      case Status.STARTED: return 'STARTED';
+      case Status.STARTING: return 'STARTING';
+      case Status.STOPPING: return 'STOPPING';
+      default: return 'UNKNOWN';
+    }
   }
 
   private [START_OR_SHUTDOWN](method: 'start' | 'shutdown'): Promise<void>;
@@ -155,24 +149,63 @@ export class RocketMQPushConsumer extends EventEmitter {
     this.operationQueue = this.operationQueue
       .then(() => {
         return new Promise<void>((queueResolve) => {
+          // 在队列内部进行状态检查和更新，确保原子性
+          if (method === 'start') {
+            if (this.status === Status.STARTING) {
+              const err = new Error('Consumer is already starting');
+              queueResolve();
+              return reject(err);
+            }
+            if (this.status === Status.STARTED) {
+              const err = new Error('Consumer is already started');
+              queueResolve();
+              return reject(err);
+            }
+            if (this.status === Status.STOPPING) {
+              const err = new Error('Consumer is stopping, please wait for shutdown to complete');
+              queueResolve();
+              return reject(err);
+            }
+            // 设置中间状态
+            this.status = Status.STARTING;
+          } else { // shutdown
+            if (this.status === Status.STOPPED) {
+              const err = new Error('Consumer is already stopped');
+              queueResolve();
+              return reject(err);
+            }
+            if (this.status === Status.STOPPING) {
+              const err = new Error('Consumer is already stopping');
+              queueResolve();
+              return reject(err);
+            }
+            if (this.status === Status.STARTING) {
+              const err = new Error('Consumer is starting, please wait for start to complete');
+              queueResolve();
+              return reject(err);
+            }
+            // 设置中间状态
+            this.status = Status.STOPPING;
+          }
+
           this.core[method]((err) => {
             if (err) {
               // 回滚状态
               if (method === 'start') {
-                this.status = StartStatus.STOPPED;
+                this.status = Status.STOPPED;
               } else {
-                this.status = StartStatus.STARTED;
+                this.status = Status.STARTED;
               }
               queueResolve();
               return reject(err);
             }
 
             if (method === 'start') {
-              this.status = StartStatus.STARTED;
+              this.status = Status.STARTED;
               if (!consumerRef) timer = setInterval(() => {}, 24 * 3600 * 1000);
               consumerRef++;
             } else {
-              this.status = StartStatus.STOPPED;
+              this.status = Status.STOPPED;
               consumerRef--;
               if (!consumerRef && timer) {
                 clearInterval(timer);
@@ -185,7 +218,11 @@ export class RocketMQPushConsumer extends EventEmitter {
           });
         });
       })
-      .catch(() => {}); // 防止队列中断
+      .catch((err) => {
+        if (process.env.NODE_ENV !== 'production') {
+          console.error('[RocketMQ] Operation queue error:', err);
+        }
+      }); // 防止队列中断
 
     return promise;
   }
@@ -198,19 +235,6 @@ export class RocketMQPushConsumer extends EventEmitter {
   start(): Promise<void>;
   start(callback: Callback): void;
   start(callback?: Callback): void | Promise<void> {
-    if (this.status === StartStatus.STARTING) {
-      const err = new Error('Consumer is already starting');
-      return callback ? callback(err) : Promise.reject(err);
-    }
-    if (this.status === StartStatus.STARTED) {
-      const err = new Error('Consumer is already started');
-      return callback ? callback(err) : Promise.reject(err);
-    }
-    if (this.status === StartStatus.STOPPING) {
-      const err = new Error('Consumer is stopping, please wait for shutdown to complete');
-      return callback ? callback(err) : Promise.reject(err);
-    }
-    this.status = StartStatus.STARTING;
     return this[START_OR_SHUTDOWN]('start', callback as any);
   }
 
@@ -222,19 +246,6 @@ export class RocketMQPushConsumer extends EventEmitter {
   shutdown(): Promise<void>;
   shutdown(callback: Callback): void;
   shutdown(callback?: Callback): void | Promise<void> {
-    if (this.status === StartStatus.STOPPED) {
-      const err = new Error('Consumer is already stopped');
-      return callback ? callback(err) : Promise.reject(err);
-    }
-    if (this.status === StartStatus.STOPPING) {
-      const err = new Error('Consumer is already stopping');
-      return callback ? callback(err) : Promise.reject(err);
-    }
-    if (this.status === StartStatus.STARTING) {
-      const err = new Error('Consumer is starting, please wait for start to complete');
-      return callback ? callback(err) : Promise.reject(err);
-    }
-    this.status = StartStatus.STOPPING;
     return this[START_OR_SHUTDOWN]('shutdown', callback as any);
   }
 
@@ -253,14 +264,21 @@ export class RocketMQPushConsumer extends EventEmitter {
     }
     // Allow subscribe in STOPPED and STARTED states
     // Prevent subscribe during state transitions (STARTING/STOPPING)
-    if (this.status === StartStatus.STARTING) {
+    if (this.status === Status.STARTING) {
       throw new Error('Cannot subscribe while consumer is starting, please wait for start to complete');
     }
-    if (this.status === StartStatus.STOPPING) {
+    if (this.status === Status.STOPPING) {
       throw new Error('Cannot subscribe while consumer is stopping');
+    }
+    if (this.status === Status.STARTED) {
+      throw new Error('Cannot subscribe while consumer is started, please shutdown first');
     }
     this.core.subscribe(topic, expression);
   }
 }
 
-module.exports = RocketMQPushConsumer;
+export default RocketMQPushConsumer;
+
+// CommonJS compatibility
+// module.exports = RocketMQPushConsumer;
+// module.exports.default = RocketMQPushConsumer;

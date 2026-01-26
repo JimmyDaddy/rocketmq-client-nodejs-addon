@@ -1,0 +1,42 @@
+language: "zh-CN"
+early_access: false
+reviews:
+  profile: "chill"
+  request_changes_workflow: false
+  high_level_summary: true
+  poem: false
+  review_status: true
+  collapse_walkthrough: false
+  auto_review:
+    enabled: true
+    drafts: false
+    base_branches:
+      - master
+  path_instructions:
+    - path: "lib/**/*.cpp"
+      instructions: |
+        Review C++ native addon code for:
+        - Memory safety and RAII patterns
+        - Thread safety with proper mutex usage
+        - N-API best practices
+        - Exception handling in destructors
+    - path: "lib/**/*.h"
+      instructions: |
+        Review C++ headers for:
+        - Proper include guards
+        - Forward declarations where possible
+        - Clean public/private separation
+    - path: "src/**/*.ts"
+      instructions: |
+        Review TypeScript code for:
+        - Type safety and proper typing
+        - Async/await patterns
+        - Error handling
+    - path: "test/**/*.ts"
+      instructions: |
+        Review tests for:
+        - Test coverage completeness
+        - Mock usage correctness
+        - Edge case handling
+chat:
+  auto_reply: true

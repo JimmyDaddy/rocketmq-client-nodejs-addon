@@ -187,16 +187,19 @@ jobs:
 
   linux-musl-arm64:
     runs-on: ubuntu-24.04-arm
-    container:
-      image: alpine:latest
     env:
       ZIG_TARGET: aarch64-linux-musl
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+
       - name: Install system dependencies
-        run: apk add --no-cache nodejs npm bash build-base cmake ninja python3 curl unzip git autoconf automake libtool pkgconfig
+        run: sudo apt-get update && sudo apt-get install -y build-essential cmake ninja-build python3 curl unzip git autoconf automake libtool pkg-config
 
       - name: Setup Zig
         uses: mlugg/setup-zig@v2

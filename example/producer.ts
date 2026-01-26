@@ -1,6 +1,6 @@
 import * as readline from 'readline';
 import { config } from './common';
-import { Producer } from '../';
+import { Producer } from '../src';
 
 if (typeof (Promise as any).withResolvers === 'undefined') {
     (Promise as any).withResolvers = function () {

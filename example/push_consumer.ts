@@ -1,5 +1,5 @@
 import { config } from './common';
-import { PushConsumer, Message, ConsumerAck } from '../';
+import { PushConsumer, Message, ConsumerAck } from '../src';
 
 void function () {
     const consumer = new PushConsumer('GID_GROUP', {

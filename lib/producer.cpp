@@ -323,15 +323,21 @@ class ProducerSendCallback : public rocketmq::AutoDeleteSendCallback {
         callback_scheduled_(false),
         callback_completed_(false) {
     std::unique_ptr<CleanupContext> ctx(new CleanupContext());
-    callback_ = Callback::New(env,
-                              callback,
-                              "RocketMQ Send Callback",
-                              0,
-                              1,
-                              ctx.get(),
-                              &Finalize,
-                              static_cast<void*>(nullptr));
-    cleanup_ctx_ = ctx.release();
+    try {
+      callback_ = Callback::New(env,
+                                callback,
+                                "RocketMQ Send Callback",
+                                0,
+                                1,
+                                ctx.get(),
+                                &Finalize,
+                                static_cast<void*>(nullptr));
+      // 只有在 Callback::New 成功后才释放所有权
+      cleanup_ctx_ = ctx.release();
+    } catch (...) {
+      // 如果 Callback::New 失败，智能指针会自动清理
+      throw;
+    }
   }
 
   ~ProducerSendCallback() {

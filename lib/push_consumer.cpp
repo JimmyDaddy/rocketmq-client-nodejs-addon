@@ -506,8 +506,9 @@ class ConsumerMessageListener : public rocketmq::MessageListenerConcurrently {
         return rocketmq::ConsumeStatus::RECONSUME_LATER;
       }
       
-      // 使用原始指针管理内存，确保异常安全
-      auto* data = new MessageAndPromise{msg, std::promise<bool>()};
+      // 使用智能指针管理内存，确保异常安全
+      std::unique_ptr<MessageAndPromise> data_ptr(new MessageAndPromise{msg, std::promise<bool>()});
+      auto* data = data_ptr.get();
       auto future = data->promise.get_future();
 
 #if defined(ROCKETMQ_COVERAGE) || defined(ROCKETMQ_USE_STUB)
@@ -548,16 +549,17 @@ class ConsumerMessageListener : public rocketmq::MessageListenerConcurrently {
 #else
       // Check if we're already aborted before making the call
       if (aborted_.load() || shutdown_requested_.load()) {
-        delete data;
         return rocketmq::ConsumeStatus::RECONSUME_LATER;
       }
       
       status = listener_.BlockingCall(data);
 #endif
       if (status != napi_ok) {
-        delete data;
         return rocketmq::ConsumeStatus::RECONSUME_LATER;
       }
+
+      // 成功调用后释放智能指针的所有权，让 CallConsumerMessageJsListener 管理内存
+      data_ptr.release();
 
       try {
 #if defined(ROCKETMQ_COVERAGE) || defined(ROCKETMQ_USE_STUB)

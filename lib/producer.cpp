@@ -533,11 +533,14 @@ Napi::Value RocketMQProducer::Send(const Napi::CallbackInfo& info) {
   std::unique_ptr<ProducerSendCallback> send_callback(
       new ProducerSendCallback(env, Napi::Persistent(Value()), info[3].As<Napi::Function>()));
   
+  // 先获取原始指针，但保持智能指针的所有权
+  auto* raw_callback = send_callback.get();
   try {
-    // 转移所有权给 RocketMQ，成功后智能指针释放所有权
-    producer_.send(message, send_callback.release());
+    producer_.send(message, raw_callback);
+    // 只有在 send() 成功后才释放所有权
+    send_callback.release();
   } catch (const std::exception& e) {
-    // 如果发送失败，智能指针会自动清理回调对象
+    // 失败时智能指针自动清理，无内存泄漏
     Napi::Error::New(env, e.what()).ThrowAsJavaScriptException();
     return env.Undefined();
   }

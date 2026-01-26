@@ -60,6 +60,8 @@ class RocketMQPushConsumer : public Napi::ObjectWrap<RocketMQPushConsumer> {
   std::atomic<bool> is_started_{false};
   std::atomic<bool> is_shutting_down_{false};
   std::atomic<bool> is_destroyed_{false};
+  // state_mutex_ 用于保护状态转换的原子性
+  // 注意：start()/shutdown() 期间会持有锁，调用方应避免在回调中访问状态
   mutable std::mutex state_mutex_;
 };
 

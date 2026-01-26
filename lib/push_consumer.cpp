@@ -84,11 +84,33 @@ RocketMQPushConsumer::RocketMQPushConsumer(const Napi::CallbackInfo& info)
 }
 
 RocketMQPushConsumer::~RocketMQPushConsumer() {
-  try {
-    consumer_.shutdown();
-  } catch (const std::exception&) {
+  SafeShutdown();
+}
+
+void RocketMQPushConsumer::SafeShutdown() {
+  std::lock_guard<std::mutex> lock(state_mutex_);
+  
+  if (is_destroyed_.exchange(true)) {
+    return; // Already destroyed
   }
-  listener_.reset();
+  
+  // First reset the listener to prevent new messages
+  if (listener_) {
+    listener_.reset();
+  }
+  
+  if (is_started_.load() && !is_shutting_down_.exchange(true)) {
+    try {
+      consumer_.shutdown();
+    } catch (const std::exception& e) {
+      // Log error but don't throw in destructor
+      fprintf(stderr, "[RocketMQ] Warning: Consumer shutdown failed in destructor: %s\n", e.what());
+    } catch (...) {
+      fprintf(stderr, "[RocketMQ] Warning: Unknown error during consumer shutdown in destructor\n");
+    }
+  }
+  
+  is_started_.store(false);
 }
 
 void RocketMQPushConsumer::SetOptions(const Napi::Object& options) {
@@ -182,11 +204,30 @@ class ConsumerStartWorker : public Napi::AsyncWorker {
                       RocketMQPushConsumer* wrapper)
       : Napi::AsyncWorker(callback),
         wrapper_ref_(Napi::Persistent(wrapper->Value())),
-        consumer_(&wrapper->consumer_) {}
+        consumer_(&wrapper->consumer_),
+        wrapper_(wrapper) {}
 
   void Execute() override {
+    std::lock_guard<std::mutex> lock(wrapper_->state_mutex_);
+    
+    if (wrapper_->is_destroyed_.load()) {
+      SetError("Consumer has been destroyed");
+      return;
+    }
+    
+    if (wrapper_->is_started_.load()) {
+      SetError("Consumer is already started");
+      return;
+    }
+    
+    if (wrapper_->is_shutting_down_.load()) {
+      SetError("Consumer is shutting down");
+      return;
+    }
+    
     try {
       consumer_->start();
+      wrapper_->is_started_.store(true);
     } catch (const std::exception& e) {
       SetError(e.what());
     }
@@ -195,6 +236,7 @@ class ConsumerStartWorker : public Napi::AsyncWorker {
  private:
   Napi::ObjectReference wrapper_ref_;
   rocketmq::DefaultMQPushConsumer* consumer_;
+  RocketMQPushConsumer* wrapper_;
 };
 
 Napi::Value RocketMQPushConsumer::Start(const Napi::CallbackInfo& info) {
@@ -219,12 +261,38 @@ class ConsumerShutdownWorker : public Napi::AsyncWorker {
                          RocketMQPushConsumer* wrapper)
       : Napi::AsyncWorker(callback),
         wrapper_ref_(Napi::Persistent(wrapper->Value())),
-        consumer_(&wrapper->consumer_) {}
+        consumer_(&wrapper->consumer_),
+        wrapper_(wrapper) {}
 
   void Execute() override {
+    std::lock_guard<std::mutex> lock(wrapper_->state_mutex_);
+    
+    if (wrapper_->is_destroyed_.load()) {
+      SetError("Consumer has been destroyed");
+      return;
+    }
+    
+    if (!wrapper_->is_started_.load()) {
+      SetError("Consumer is not started");
+      return;
+    }
+    
+    if (wrapper_->is_shutting_down_.exchange(true)) {
+      SetError("Consumer is already shutting down");
+      return;
+    }
+    
     try {
+      // First reset the listener to prevent new messages
+      if (wrapper_->listener_) {
+        wrapper_->listener_.reset();
+      }
+      
       consumer_->shutdown();
+      wrapper_->is_started_.store(false);
+      wrapper_->is_shutting_down_.store(false); // Reset shutdown flag after successful shutdown
     } catch (const std::exception& e) {
+      wrapper_->is_shutting_down_.store(false); // Reset on error
       SetError(e.what());
     }
   }
@@ -232,6 +300,7 @@ class ConsumerShutdownWorker : public Napi::AsyncWorker {
  private:
   Napi::ObjectReference wrapper_ref_;
   rocketmq::DefaultMQPushConsumer* consumer_;
+  RocketMQPushConsumer* wrapper_;
 };
 
 Napi::Value RocketMQPushConsumer::Shutdown(const Napi::CallbackInfo& info) {
@@ -253,7 +322,7 @@ Napi::Value RocketMQPushConsumer::Shutdown(const Napi::CallbackInfo& info) {
 Napi::Value RocketMQPushConsumer::Subscribe(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
 
-  // Check if required parameters are provided
+  // Check if required parameters are provided FIRST (before state checks)
   if (info.Length() < 2) {
     Napi::TypeError::New(env, "Wrong number of arguments").ThrowAsJavaScriptException();
     return env.Undefined();
@@ -262,6 +331,20 @@ Napi::Value RocketMQPushConsumer::Subscribe(const Napi::CallbackInfo& info) {
   if (!info[0].IsString() || !info[1].IsString()) {
     Napi::TypeError::New(env, "Topic and expression must be strings").ThrowAsJavaScriptException();
     return env.Undefined();
+  }
+
+  // Check if consumer is in valid state AFTER parameter validation
+  {
+    std::lock_guard<std::mutex> lock(state_mutex_);
+    if (is_destroyed_.load()) {
+      Napi::Error::New(env, "Consumer has been destroyed").ThrowAsJavaScriptException();
+      return env.Undefined();
+    }
+    
+    if (is_shutting_down_.load()) {
+      Napi::Error::New(env, "Consumer is shutting down").ThrowAsJavaScriptException();
+      return env.Undefined();
+    }
   }
 
   Napi::String topic = info[0].As<Napi::String>();
@@ -392,10 +475,17 @@ class ConsumerMessageListener : public rocketmq::MessageListenerConcurrently {
   ConsumerMessageListener(Napi::Env& env, Napi::Function&& callback)
       : listener_(
             Listener::New(env, callback, "RocketMQ Message Listener", 0, 1)),
-        aborted_(false) {}
+        aborted_(false),
+        shutdown_requested_(false) {}
 
   ~ConsumerMessageListener() {
-    if (!aborted_) {
+    Shutdown();
+  }
+  
+  void Shutdown() {
+    shutdown_requested_.store(true);
+    
+    if (!aborted_.exchange(true)) {
       try {
         listener_.Release();
 #if defined(ROCKETMQ_COVERAGE) || defined(ROCKETMQ_USE_STUB)
@@ -403,14 +493,28 @@ class ConsumerMessageListener : public rocketmq::MessageListenerConcurrently {
           throw std::runtime_error("consumer release throw");
         }
 #endif
+      } catch (const std::exception& e) {
+        fprintf(stderr, "[RocketMQ] Warning: Error releasing consumer listener: %s\n", e.what());
       } catch (...) {
+        fprintf(stderr, "[RocketMQ] Warning: Unknown error releasing consumer listener\n");
       }
     }
   }
 
   rocketmq::ConsumeStatus consumeMessage(
       std::vector<rocketmq::MQMessageExt>& msgs) override {
+    
+    // Check if shutdown was requested
+    if (shutdown_requested_.load()) {
+      return rocketmq::ConsumeStatus::RECONSUME_LATER;
+    }
+    
     for (auto& msg : msgs) {
+      // Double check shutdown status for each message
+      if (shutdown_requested_.load()) {
+        return rocketmq::ConsumeStatus::RECONSUME_LATER;
+      }
+      
       auto* data = new MessageAndPromise{msg, std::promise<bool>()};
       auto future = data->promise.get_future();
 
@@ -443,7 +547,7 @@ class ConsumerMessageListener : public rocketmq::MessageListenerConcurrently {
 #if defined(ROCKETMQ_COVERAGE) || defined(ROCKETMQ_USE_STUB)
       if (IsEnvEnabled("ROCKETMQ_STUB_CONSUMER_ABORT_TSFN")) {
         listener_.Abort();
-        aborted_ = true;
+        aborted_.store(true);
         status = napi_generic_failure;
       } else if (IsEnvEnabled("ROCKETMQ_STUB_CONSUMER_BLOCKING_FAIL")) {
         status = napi_generic_failure;
@@ -451,6 +555,12 @@ class ConsumerMessageListener : public rocketmq::MessageListenerConcurrently {
         status = listener_.BlockingCall(data);
       }
 #else
+      // Check if we're already aborted before making the call
+      if (aborted_.load() || shutdown_requested_.load()) {
+        delete data;
+        return rocketmq::ConsumeStatus::RECONSUME_LATER;
+      }
+      
       status = listener_.BlockingCall(data);
 #endif
       if (status != napi_ok) {
@@ -496,19 +606,46 @@ class ConsumerMessageListener : public rocketmq::MessageListenerConcurrently {
 
   Listener listener_;
   std::atomic<bool> aborted_;
+  std::atomic<bool> shutdown_requested_;
 };
 
 Napi::Value RocketMQPushConsumer::SetListener(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
 
+  // Check parameters FIRST
   if (info.Length() < 1 || !info[0].IsFunction()) {
     Napi::TypeError::New(env, "Function expected as first argument").ThrowAsJavaScriptException();
     return env.Undefined();
   }
 
-  listener_.reset(
-      new ConsumerMessageListener(env, info[0].As<Napi::Function>()));
-  consumer_.registerMessageListener(listener_.get());
+  // Check if consumer is in valid state AFTER parameter validation
+  {
+    std::lock_guard<std::mutex> lock(state_mutex_);
+    if (is_destroyed_.load()) {
+      Napi::Error::New(env, "Consumer has been destroyed").ThrowAsJavaScriptException();
+      return env.Undefined();
+    }
+    
+    if (is_shutting_down_.load()) {
+      Napi::Error::New(env, "Consumer is shutting down").ThrowAsJavaScriptException();
+      return env.Undefined();
+    }
+  }
+
+  // Safely replace the listener
+  {
+    std::lock_guard<std::mutex> lock(state_mutex_);
+    
+    // Reset old listener if exists (destructor will handle cleanup)
+    if (listener_) {
+      listener_.reset();
+    }
+    
+    listener_.reset(
+        new ConsumerMessageListener(env, info[0].As<Napi::Function>()));
+    consumer_.registerMessageListener(listener_.get());
+  }
+  
   return env.Undefined();
 }
 

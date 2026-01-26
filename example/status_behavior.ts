@@ -1,7 +1,7 @@
-const { RocketMQProducer } = require('../src/producer');
-const { Status } = require('../src/constants');
+import { RocketMQProducer } from '../src/producer';
+import { Status } from '../src/constants';
 
-async function demonstrateStatusBehavior() {
+async function demonstrateStatusBehavior(): Promise<void> {
   const producer = new RocketMQProducer('demo-group');
   
   console.log('=== 新的状态行为演示 ===');
@@ -21,14 +21,14 @@ async function demonstrateStatusBehavior() {
   try {
     await promise1;
     console.log('第一个 start() 调用成功');
-  } catch (err) {
+  } catch (err: any) {
     console.log('第一个 start() 调用失败:', err.message);
   }
   
   try {
     await promise2;
     console.log('第二个 start() 调用成功');
-  } catch (err) {
+  } catch (err: any) {
     console.log('第二个 start() 调用失败:', err.message);
   }
   
@@ -37,7 +37,7 @@ async function demonstrateStatusBehavior() {
   console.log('最终状态:', getStatusName(producer.status)); // STOPPED
 }
 
-function getStatusName(status) {
+function getStatusName(status: Status): string {
   switch (status) {
     case Status.STOPPED: return 'STOPPED';
     case Status.STARTED: return 'STARTED';

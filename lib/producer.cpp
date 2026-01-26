@@ -84,7 +84,28 @@ RocketMQProducer::RocketMQProducer(const Napi::CallbackInfo& info)
 }
 
 RocketMQProducer::~RocketMQProducer() {
-  producer_.shutdown();
+  SafeShutdown();
+}
+
+void RocketMQProducer::SafeShutdown() {
+  std::lock_guard<std::mutex> lock(state_mutex_);
+  
+  if (is_destroyed_.exchange(true)) {
+    return; // Already destroyed
+  }
+  
+  if (is_started_.load() && !is_shutting_down_.exchange(true)) {
+    try {
+      producer_.shutdown();
+    } catch (const std::exception& e) {
+      // Log error but don't throw in destructor
+      fprintf(stderr, "[RocketMQ] Warning: Producer shutdown failed in destructor: %s\n", e.what());
+    } catch (...) {
+      fprintf(stderr, "[RocketMQ] Warning: Unknown error during producer shutdown in destructor\n");
+    }
+  }
+  
+  is_started_.store(false);
 }
 
 void RocketMQProducer::SetOptions(const Napi::Object& options) {
@@ -179,11 +200,30 @@ class ProducerStartWorker : public Napi::AsyncWorker {
                       RocketMQProducer* wrapper)
       : Napi::AsyncWorker(callback),
         wrapper_ref_(Napi::Persistent(wrapper->Value())),
-        producer_(&wrapper->producer_) {}
+        producer_(&wrapper->producer_),
+        wrapper_(wrapper) {}
 
   void Execute() override {
+    std::lock_guard<std::mutex> lock(wrapper_->state_mutex_);
+    
+    if (wrapper_->is_destroyed_.load()) {
+      SetError("Producer has been destroyed");
+      return;
+    }
+    
+    if (wrapper_->is_started_.load()) {
+      SetError("Producer is already started");
+      return;
+    }
+    
+    if (wrapper_->is_shutting_down_.load()) {
+      SetError("Producer is shutting down");
+      return;
+    }
+    
     try {
       producer_->start();
+      wrapper_->is_started_.store(true);
     } catch (const std::exception& e) {
       SetError(e.what());
     }
@@ -192,6 +232,7 @@ class ProducerStartWorker : public Napi::AsyncWorker {
  private:
   Napi::ObjectReference wrapper_ref_;
   rocketmq::DefaultMQProducer* producer_;
+  RocketMQProducer* wrapper_;
 };
 
 Napi::Value RocketMQProducer::Start(const Napi::CallbackInfo& info) {
@@ -216,12 +257,33 @@ class ProducerShutdownWorker : public Napi::AsyncWorker {
                          RocketMQProducer* wrapper)
       : Napi::AsyncWorker(callback),
         wrapper_ref_(Napi::Persistent(wrapper->Value())),
-        producer_(&wrapper->producer_) {}
+        producer_(&wrapper->producer_),
+        wrapper_(wrapper) {}
 
   void Execute() override {
+    std::lock_guard<std::mutex> lock(wrapper_->state_mutex_);
+    
+    if (wrapper_->is_destroyed_.load()) {
+      SetError("Producer has been destroyed");
+      return;
+    }
+    
+    if (!wrapper_->is_started_.load()) {
+      SetError("Producer is not started");
+      return;
+    }
+    
+    if (wrapper_->is_shutting_down_.exchange(true)) {
+      SetError("Producer is already shutting down");
+      return;
+    }
+    
     try {
       producer_->shutdown();
+      wrapper_->is_started_.store(false);
+      wrapper_->is_shutting_down_.store(false); // Reset shutdown flag after successful shutdown
     } catch (const std::exception& e) {
+      wrapper_->is_shutting_down_.store(false); // Reset on error
       SetError(e.what());
     }
   }
@@ -229,6 +291,7 @@ class ProducerShutdownWorker : public Napi::AsyncWorker {
  private:
   Napi::ObjectReference wrapper_ref_;
   rocketmq::DefaultMQProducer* producer_;
+  RocketMQProducer* wrapper_;
 };
 
 Napi::Value RocketMQProducer::Shutdown(const Napi::CallbackInfo& info) {
@@ -265,7 +328,8 @@ class ProducerSendCallback : public rocketmq::AutoDeleteSendCallback {
       : prevent_gc_(new Napi::ObjectReference(std::move(producer_ref))),
         cleanup_ctx_(nullptr),
         callback_(),
-        prevent_prevent_release_(false) {
+        prevent_prevent_release_(false),
+        callback_scheduled_(false) {
     std::unique_ptr<CleanupContext> ctx(new CleanupContext());
     callback_ = Callback::New(env,
                               callback,
@@ -280,7 +344,13 @@ class ProducerSendCallback : public rocketmq::AutoDeleteSendCallback {
 
   ~ProducerSendCallback() {
     if (!prevent_prevent_release_.exchange(true)) {
-      callback_.Abort();
+      try {
+        callback_.Abort();
+      } catch (const std::exception& e) {
+        fprintf(stderr, "[RocketMQ] Warning: Error aborting send callback: %s\n", e.what());
+      } catch (...) {
+        fprintf(stderr, "[RocketMQ] Warning: Unknown error aborting send callback\n");
+      }
     }
   }
 
@@ -297,6 +367,11 @@ class ProducerSendCallback : public rocketmq::AutoDeleteSendCallback {
  private:
   void ScheduleCallback(std::unique_ptr<rocketmq::SendResult> result,
                         std::exception_ptr exception) {
+    // Prevent multiple callback scheduling
+    if (callback_scheduled_.exchange(true)) {
+      return;
+    }
+    
     auto prevent_gc = std::move(prevent_gc_);
     auto* data = new CallbackData{
         std::move(result),
@@ -315,12 +390,18 @@ class ProducerSendCallback : public rocketmq::AutoDeleteSendCallback {
     status = callback_.BlockingCall(data);
 #endif
     if (status != napi_ok) {
-      fprintf(stderr, "Failed to schedule JavaScript callback: %d\n", status);
+      fprintf(stderr, "[RocketMQ] Failed to schedule JavaScript callback: %d\n", status);
       cleanup_ctx_->pending.reset(data);
     }
 
     if (!prevent_prevent_release_.exchange(true)) {
-      callback_.Release();
+      try {
+        callback_.Release();
+      } catch (const std::exception& e) {
+        fprintf(stderr, "[RocketMQ] Warning: Error releasing send callback: %s\n", e.what());
+      } catch (...) {
+        fprintf(stderr, "[RocketMQ] Warning: Unknown error releasing send callback\n");
+      }
     }
   }
 
@@ -357,6 +438,10 @@ class ProducerSendCallback : public rocketmq::AutoDeleteSendCallback {
       }
     } catch (const Napi::Error& e) {
       e.ThrowAsJavaScriptException();
+    } catch (const std::exception& e) {
+      fprintf(stderr, "[RocketMQ] Warning: Exception in send callback: %s\n", e.what());
+    } catch (...) {
+      fprintf(stderr, "[RocketMQ] Warning: Unknown exception in send callback\n");
     }
   }
 
@@ -372,12 +457,13 @@ class ProducerSendCallback : public rocketmq::AutoDeleteSendCallback {
   CleanupContext* cleanup_ctx_;
   Callback callback_;
   std::atomic<bool> prevent_prevent_release_;
+  std::atomic<bool> callback_scheduled_;
 };
 
 Napi::Value RocketMQProducer::Send(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
 
-  // Check if required parameters are provided
+  // Check if required parameters are provided FIRST (before state checks)
   if (info.Length() < 4) {
     Napi::TypeError::New(env, "Wrong number of arguments").ThrowAsJavaScriptException();
     return env.Undefined();
@@ -391,6 +477,25 @@ Napi::Value RocketMQProducer::Send(const Napi::CallbackInfo& info) {
   if (!info[3].IsFunction()) {
     Napi::TypeError::New(env, "Callback must be a function").ThrowAsJavaScriptException();
     return env.Undefined();
+  }
+
+  // Check if producer is in valid state AFTER parameter validation
+  {
+    std::lock_guard<std::mutex> lock(state_mutex_);
+    if (is_destroyed_.load()) {
+      Napi::Error::New(env, "Producer has been destroyed").ThrowAsJavaScriptException();
+      return env.Undefined();
+    }
+    
+    if (!is_started_.load()) {
+      Napi::Error::New(env, "Producer is not started").ThrowAsJavaScriptException();
+      return env.Undefined();
+    }
+    
+    if (is_shutting_down_.load()) {
+      Napi::Error::New(env, "Producer is shutting down").ThrowAsJavaScriptException();
+      return env.Undefined();
+    }
   }
 
   rocketmq::MQMessage message = [&]() {

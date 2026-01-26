@@ -18,6 +18,8 @@
 #define __ROCKETMQ_PUSH_CONSUMER_H__
 
 #include <string>
+#include <atomic>
+#include <mutex>
 
 #include <napi.h>
 
@@ -50,10 +52,15 @@ class RocketMQPushConsumer : public Napi::ObjectWrap<RocketMQPushConsumer> {
 
  private:
   void SetOptions(const Napi::Object& options);
+  void SafeShutdown();
 
  private:
   rocketmq::DefaultMQPushConsumer consumer_;
   std::unique_ptr<ConsumerMessageListener> listener_;
+  std::atomic<bool> is_started_{false};
+  std::atomic<bool> is_shutting_down_{false};
+  std::atomic<bool> is_destroyed_{false};
+  mutable std::mutex state_mutex_;
 };
 
 }  // namespace __node_rocketmq__

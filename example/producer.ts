@@ -1,19 +1,18 @@
-"use strict";
+import * as readline from 'readline';
+import { config } from './common';
+import { Producer } from '../';
 
-if (typeof Promise.withResolvers === 'undefined') {
-    Promise.withResolvers = function () {
-        let resolve, reject
+if (typeof (Promise as any).withResolvers === 'undefined') {
+    (Promise as any).withResolvers = function () {
+        let resolve: ((value?: any) => void) | null = null;
+        let reject: ((reason?: any) => void) | null = null;
         const promise = new Promise((res, rej) => {
-            resolve = res
-            reject = rej
-        })
-        return { promise, resolve, reject }
-    }
+            resolve = res;
+            reject = rej;
+        });
+        return { promise, resolve, reject };
+    };
 }
-
-const readline = require('readline');
-const common = require('./common');
-const Producer = require('../').Producer;
 
 const rl = readline.createInterface({
     input: process.stdin,
@@ -22,7 +21,7 @@ const rl = readline.createInterface({
 
 void async function () {
     const producer = new Producer('GID_GROUP', {
-        nameServer: common.nameServer,
+        nameServer: config.nameServer,
     });
 
     // producer.setSessionCredentials('accessKey', 'secretKey', 'ALIYUN')
@@ -30,8 +29,8 @@ void async function () {
     await producer.start();
 
     while(1) {
-        const { promise, resolve, reject } = Promise.withResolvers()
-        rl.question('Enter input: ', async input => {
+        const { promise, resolve, reject } = (Promise as any).withResolvers();
+        rl.question('Enter input: ', async (input: string) => {
             await producer.send('TP_TOPIC', input).catch(reject);
             resolve();
         });

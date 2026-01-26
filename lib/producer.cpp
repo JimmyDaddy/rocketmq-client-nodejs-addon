@@ -31,20 +31,9 @@
 #include <SendCallback.h>
 
 #include "addon_data.h"
+#include "common_utils.h"
 
 namespace __node_rocketmq__ {
-
-#if defined(ROCKETMQ_COVERAGE) || defined(ROCKETMQ_USE_STUB)
-namespace {
-bool IsEnvEnabled(const char* name) {
-  const char* value = std::getenv(name);
-  if (value == nullptr) {
-    return false;
-  }
-  return value[0] != '\0' && value[0] != '0';
-}
-}
-#endif
 
 Napi::Object RocketMQProducer::Init(Napi::Env env, Napi::Object exports, AddonData* addon_data) {
   Napi::Function func =
@@ -204,27 +193,24 @@ class ProducerStartWorker : public Napi::AsyncWorker {
         wrapper_(wrapper) {}
 
   void Execute() override {
-    // 只在状态检查时持有锁
-    {
-      std::lock_guard<std::mutex> lock(wrapper_->state_mutex_);
-      
-      if (wrapper_->is_destroyed_.load()) {
-        SetError("Producer has been destroyed");
-        return;
-      }
-      
-      if (wrapper_->is_started_.load()) {
-        SetError("Producer is already started");
-        return;
-      }
-      
-      if (wrapper_->is_shutting_down_.load()) {
-        SetError("Producer is shutting down");
-        return;
-      }
+    // 在整个操作期间持有锁以避免竞态条件
+    std::lock_guard<std::mutex> lock(wrapper_->state_mutex_);
+    
+    if (wrapper_->is_destroyed_.load()) {
+      SetError("Producer has been destroyed");
+      return;
     }
     
-    // 锁释放后执行耗时操作
+    if (wrapper_->is_started_.load()) {
+      SetError("Producer is already started");
+      return;
+    }
+    
+    if (wrapper_->is_shutting_down_.load()) {
+      SetError("Producer is shutting down");
+      return;
+    }
+    
     try {
       producer_->start();
       wrapper_->is_started_.store(true);
@@ -265,27 +251,24 @@ class ProducerShutdownWorker : public Napi::AsyncWorker {
         wrapper_(wrapper) {}
 
   void Execute() override {
-    // 只在状态检查时持有锁
-    {
-      std::lock_guard<std::mutex> lock(wrapper_->state_mutex_);
-      
-      if (wrapper_->is_destroyed_.load()) {
-        SetError("Producer has been destroyed");
-        return;
-      }
-      
-      if (!wrapper_->is_started_.load()) {
-        SetError("Producer is not started");
-        return;
-      }
-      
-      if (wrapper_->is_shutting_down_.exchange(true)) {
-        SetError("Producer is already shutting down");
-        return;
-      }
+    // 在整个操作期间持有锁以避免竞态条件
+    std::lock_guard<std::mutex> lock(wrapper_->state_mutex_);
+    
+    if (wrapper_->is_destroyed_.load()) {
+      SetError("Producer has been destroyed");
+      return;
     }
     
-    // 锁释放后执行耗时操作
+    if (!wrapper_->is_started_.load()) {
+      SetError("Producer is not started");
+      return;
+    }
+    
+    if (wrapper_->is_shutting_down_.exchange(true)) {
+      SetError("Producer is already shutting down");
+      return;
+    }
+    
     try {
       producer_->shutdown();
       wrapper_->is_started_.store(false);
@@ -337,7 +320,8 @@ class ProducerSendCallback : public rocketmq::AutoDeleteSendCallback {
         cleanup_ctx_(nullptr),
         callback_(),
         prevent_prevent_release_(false),
-        callback_scheduled_(false) {
+        callback_scheduled_(false),
+        callback_completed_(false) {
     std::unique_ptr<CleanupContext> ctx(new CleanupContext());
     callback_ = Callback::New(env,
                               callback,
@@ -401,6 +385,8 @@ class ProducerSendCallback : public rocketmq::AutoDeleteSendCallback {
     if (status != napi_ok) {
       fprintf(stderr, "[RocketMQ] Failed to schedule JavaScript callback: %d\n", status);
       cleanup_ctx_->pending.reset(data);
+    } else {
+      callback_completed_.store(true);
     }
 
     if (!prevent_prevent_release_.exchange(true)) {
@@ -467,6 +453,7 @@ class ProducerSendCallback : public rocketmq::AutoDeleteSendCallback {
   Callback callback_;
   std::atomic<bool> prevent_prevent_release_;
   std::atomic<bool> callback_scheduled_;
+  std::atomic<bool> callback_completed_;
 };
 
 Napi::Value RocketMQProducer::Send(const Napi::CallbackInfo& info) {
@@ -542,12 +529,15 @@ Napi::Value RocketMQProducer::Send(const Napi::CallbackInfo& info) {
     }
   }
 
-  auto* send_callback =
-      new ProducerSendCallback(env, Napi::Persistent(Value()), info[3].As<Napi::Function>());
+  // 使用智能指针管理回调对象的生命周期
+  std::unique_ptr<ProducerSendCallback> send_callback(
+      new ProducerSendCallback(env, Napi::Persistent(Value()), info[3].As<Napi::Function>()));
+  
   try {
-    producer_.send(message, send_callback);
+    // 转移所有权给 RocketMQ，成功后智能指针释放所有权
+    producer_.send(message, send_callback.release());
   } catch (const std::exception& e) {
-    delete send_callback;
+    // 如果发送失败，智能指针会自动清理回调对象
     Napi::Error::New(env, e.what()).ThrowAsJavaScriptException();
     return env.Undefined();
   }

@@ -30,20 +30,9 @@
 
 #include "addon_data.h"
 #include "consumer_ack.h"
+#include "common_utils.h"
 
 namespace __node_rocketmq__ {
-
-#if defined(ROCKETMQ_COVERAGE) || defined(ROCKETMQ_USE_STUB)
-namespace {
-bool IsEnvEnabled(const char* name) {
-  const char* value = std::getenv(name);
-  if (value == nullptr) {
-    return false;
-  }
-  return value[0] != '\0' && value[0] != '0';
-}
-}
-#endif
 
 Napi::Object RocketMQPushConsumer::Init(Napi::Env env, Napi::Object exports, AddonData* addon_data) {
   Napi::Function func = DefineClass(
@@ -208,27 +197,24 @@ class ConsumerStartWorker : public Napi::AsyncWorker {
         wrapper_(wrapper) {}
 
   void Execute() override {
-    // 只在状态检查时持有锁
-    {
-      std::lock_guard<std::mutex> lock(wrapper_->state_mutex_);
-      
-      if (wrapper_->is_destroyed_.load()) {
-        SetError("Consumer has been destroyed");
-        return;
-      }
-      
-      if (wrapper_->is_started_.load()) {
-        SetError("Consumer is already started");
-        return;
-      }
-      
-      if (wrapper_->is_shutting_down_.load()) {
-        SetError("Consumer is shutting down");
-        return;
-      }
+    // 在整个操作期间持有锁以避免竞态条件
+    std::lock_guard<std::mutex> lock(wrapper_->state_mutex_);
+    
+    if (wrapper_->is_destroyed_.load()) {
+      SetError("Consumer has been destroyed");
+      return;
     }
     
-    // 锁释放后执行耗时操作
+    if (wrapper_->is_started_.load()) {
+      SetError("Consumer is already started");
+      return;
+    }
+    
+    if (wrapper_->is_shutting_down_.load()) {
+      SetError("Consumer is shutting down");
+      return;
+    }
+    
     try {
       consumer_->start();
       wrapper_->is_started_.store(true);
@@ -269,32 +255,29 @@ class ConsumerShutdownWorker : public Napi::AsyncWorker {
         wrapper_(wrapper) {}
 
   void Execute() override {
-    // 只在状态检查时持有锁
-    {
-      std::lock_guard<std::mutex> lock(wrapper_->state_mutex_);
-      
-      if (wrapper_->is_destroyed_.load()) {
-        SetError("Consumer has been destroyed");
-        return;
-      }
-      
-      if (!wrapper_->is_started_.load()) {
-        SetError("Consumer is not started");
-        return;
-      }
-      
-      if (wrapper_->is_shutting_down_.exchange(true)) {
-        SetError("Consumer is already shutting down");
-        return;
-      }
-      
-      // First reset the listener to prevent new messages
-      if (wrapper_->listener_) {
-        wrapper_->listener_.reset();
-      }
+    // 在整个操作期间持有锁以避免竞态条件
+    std::lock_guard<std::mutex> lock(wrapper_->state_mutex_);
+    
+    if (wrapper_->is_destroyed_.load()) {
+      SetError("Consumer has been destroyed");
+      return;
     }
     
-    // 锁释放后执行耗时操作
+    if (!wrapper_->is_started_.load()) {
+      SetError("Consumer is not started");
+      return;
+    }
+    
+    if (wrapper_->is_shutting_down_.exchange(true)) {
+      SetError("Consumer is already shutting down");
+      return;
+    }
+    
+    // First reset the listener to prevent new messages
+    if (wrapper_->listener_) {
+      wrapper_->listener_.reset();
+    }
+    
     try {
       consumer_->shutdown();
       wrapper_->is_started_.store(false);
@@ -523,6 +506,7 @@ class ConsumerMessageListener : public rocketmq::MessageListenerConcurrently {
         return rocketmq::ConsumeStatus::RECONSUME_LATER;
       }
       
+      // 使用原始指针管理内存，确保异常安全
       auto* data = new MessageAndPromise{msg, std::promise<bool>()};
       auto future = data->promise.get_future();
 
@@ -537,10 +521,9 @@ class ConsumerMessageListener : public rocketmq::MessageListenerConcurrently {
       }
 
       if (IsEnvEnabled("ROCKETMQ_STUB_CONSUMER_TIMEOUT_SKIP_CALL")) {
-        std::unique_ptr<MessageAndPromise> data_guard(data);
         auto wait_time = IsEnvEnabled("ROCKETMQ_STUB_CONSUMER_TIMEOUT")
                              ? std::chrono::milliseconds(0)
-                             : std::chrono::seconds(30);
+                             : config::DEFAULT_MESSAGE_TIMEOUT;
         if (future.wait_for(wait_time) == std::future_status::timeout) {
           return rocketmq::ConsumeStatus::RECONSUME_LATER;
         }
@@ -587,9 +570,9 @@ class ConsumerMessageListener : public rocketmq::MessageListenerConcurrently {
 
         auto wait_time = IsEnvEnabled("ROCKETMQ_STUB_CONSUMER_TIMEOUT")
                              ? std::chrono::milliseconds(0)
-                             : std::chrono::seconds(30);
+                             : config::DEFAULT_MESSAGE_TIMEOUT;
 #else
-        auto wait_time = std::chrono::seconds(30);
+        auto wait_time = config::DEFAULT_MESSAGE_TIMEOUT;
 #endif
         if (future.wait_for(wait_time) == std::future_status::timeout) {
           return rocketmq::ConsumeStatus::RECONSUME_LATER;

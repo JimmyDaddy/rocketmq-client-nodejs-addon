@@ -204,23 +204,27 @@ class ProducerStartWorker : public Napi::AsyncWorker {
         wrapper_(wrapper) {}
 
   void Execute() override {
-    std::lock_guard<std::mutex> lock(wrapper_->state_mutex_);
-    
-    if (wrapper_->is_destroyed_.load()) {
-      SetError("Producer has been destroyed");
-      return;
+    // 只在状态检查时持有锁
+    {
+      std::lock_guard<std::mutex> lock(wrapper_->state_mutex_);
+      
+      if (wrapper_->is_destroyed_.load()) {
+        SetError("Producer has been destroyed");
+        return;
+      }
+      
+      if (wrapper_->is_started_.load()) {
+        SetError("Producer is already started");
+        return;
+      }
+      
+      if (wrapper_->is_shutting_down_.load()) {
+        SetError("Producer is shutting down");
+        return;
+      }
     }
     
-    if (wrapper_->is_started_.load()) {
-      SetError("Producer is already started");
-      return;
-    }
-    
-    if (wrapper_->is_shutting_down_.load()) {
-      SetError("Producer is shutting down");
-      return;
-    }
-    
+    // 锁释放后执行耗时操作
     try {
       producer_->start();
       wrapper_->is_started_.store(true);
@@ -261,23 +265,27 @@ class ProducerShutdownWorker : public Napi::AsyncWorker {
         wrapper_(wrapper) {}
 
   void Execute() override {
-    std::lock_guard<std::mutex> lock(wrapper_->state_mutex_);
-    
-    if (wrapper_->is_destroyed_.load()) {
-      SetError("Producer has been destroyed");
-      return;
+    // 只在状态检查时持有锁
+    {
+      std::lock_guard<std::mutex> lock(wrapper_->state_mutex_);
+      
+      if (wrapper_->is_destroyed_.load()) {
+        SetError("Producer has been destroyed");
+        return;
+      }
+      
+      if (!wrapper_->is_started_.load()) {
+        SetError("Producer is not started");
+        return;
+      }
+      
+      if (wrapper_->is_shutting_down_.exchange(true)) {
+        SetError("Producer is already shutting down");
+        return;
+      }
     }
     
-    if (!wrapper_->is_started_.load()) {
-      SetError("Producer is not started");
-      return;
-    }
-    
-    if (wrapper_->is_shutting_down_.exchange(true)) {
-      SetError("Producer is already shutting down");
-      return;
-    }
-    
+    // 锁释放后执行耗时操作
     try {
       producer_->shutdown();
       wrapper_->is_started_.store(false);
@@ -369,6 +377,7 @@ class ProducerSendCallback : public rocketmq::AutoDeleteSendCallback {
                         std::exception_ptr exception) {
     // Prevent multiple callback scheduling
     if (callback_scheduled_.exchange(true)) {
+      fprintf(stderr, "[RocketMQ] Warning: Callback already scheduled, ignoring duplicate\n");
       return;
     }
     

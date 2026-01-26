@@ -208,23 +208,27 @@ class ConsumerStartWorker : public Napi::AsyncWorker {
         wrapper_(wrapper) {}
 
   void Execute() override {
-    std::lock_guard<std::mutex> lock(wrapper_->state_mutex_);
-    
-    if (wrapper_->is_destroyed_.load()) {
-      SetError("Consumer has been destroyed");
-      return;
+    // 只在状态检查时持有锁
+    {
+      std::lock_guard<std::mutex> lock(wrapper_->state_mutex_);
+      
+      if (wrapper_->is_destroyed_.load()) {
+        SetError("Consumer has been destroyed");
+        return;
+      }
+      
+      if (wrapper_->is_started_.load()) {
+        SetError("Consumer is already started");
+        return;
+      }
+      
+      if (wrapper_->is_shutting_down_.load()) {
+        SetError("Consumer is shutting down");
+        return;
+      }
     }
     
-    if (wrapper_->is_started_.load()) {
-      SetError("Consumer is already started");
-      return;
-    }
-    
-    if (wrapper_->is_shutting_down_.load()) {
-      SetError("Consumer is shutting down");
-      return;
-    }
-    
+    // 锁释放后执行耗时操作
     try {
       consumer_->start();
       wrapper_->is_started_.store(true);
@@ -265,29 +269,33 @@ class ConsumerShutdownWorker : public Napi::AsyncWorker {
         wrapper_(wrapper) {}
 
   void Execute() override {
-    std::lock_guard<std::mutex> lock(wrapper_->state_mutex_);
-    
-    if (wrapper_->is_destroyed_.load()) {
-      SetError("Consumer has been destroyed");
-      return;
-    }
-    
-    if (!wrapper_->is_started_.load()) {
-      SetError("Consumer is not started");
-      return;
-    }
-    
-    if (wrapper_->is_shutting_down_.exchange(true)) {
-      SetError("Consumer is already shutting down");
-      return;
-    }
-    
-    try {
+    // 只在状态检查时持有锁
+    {
+      std::lock_guard<std::mutex> lock(wrapper_->state_mutex_);
+      
+      if (wrapper_->is_destroyed_.load()) {
+        SetError("Consumer has been destroyed");
+        return;
+      }
+      
+      if (!wrapper_->is_started_.load()) {
+        SetError("Consumer is not started");
+        return;
+      }
+      
+      if (wrapper_->is_shutting_down_.exchange(true)) {
+        SetError("Consumer is already shutting down");
+        return;
+      }
+      
       // First reset the listener to prevent new messages
       if (wrapper_->listener_) {
         wrapper_->listener_.reset();
       }
-      
+    }
+    
+    // 锁释放后执行耗时操作
+    try {
       consumer_->shutdown();
       wrapper_->is_started_.store(false);
       wrapper_->is_shutting_down_.store(false); // Reset shutdown flag after successful shutdown

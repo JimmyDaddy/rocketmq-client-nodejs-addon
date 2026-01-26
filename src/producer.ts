@@ -290,6 +290,12 @@ export class RocketMQProducer {
 
     this.core.send(topic, body, actualOptions, (err, status, msgId, offset) => {
       if (err) {
+        // 在发送回调中也检查状态
+        if (this.status !== Status.STARTED) {
+          const statusName = this.getStatusName();
+          const stateErr = new Error(`Producer state changed during send operation. Current status: ${statusName}`);
+          return reject(stateErr);
+        }
         return reject(err);
       }
 

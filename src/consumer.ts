@@ -25,7 +25,7 @@ export interface Message {
 }
 
 export interface ConsumerAck {
-  done(success: boolean): void;
+  done(success?: boolean): void;
 }
 
 type Callback<T = void> = (err?: Error | null, result?: T) => void;
@@ -113,20 +113,12 @@ export class RocketMQPushConsumer extends EventEmitter {
     if (typeof accessKey !== 'string') throw new TypeError('accessKey must be a string');
     if (typeof secretKey !== 'string') throw new TypeError('secretKey must be a string');
     if (typeof onsChannel !== 'string') throw new TypeError('onsChannel must be a string');
-    
+
     this.core.setSessionCredentials(accessKey, secretKey, onsChannel);
     return true;
   }
 
-  private getStatusName(status: Status = this.status): string {
-    switch (status) {
-      case Status.STOPPED: return 'STOPPED';
-      case Status.STARTED: return 'STARTED';
-      case Status.STARTING: return 'STARTING';
-      case Status.STOPPING: return 'STOPPING';
-      default: return 'UNKNOWN';
-    }
-  }
+
 
   private [START_OR_SHUTDOWN](method: 'start' | 'shutdown'): Promise<void>;
   private [START_OR_SHUTDOWN](method: 'start' | 'shutdown', callback: Callback): void;

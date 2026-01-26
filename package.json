@@ -39,7 +39,7 @@
     "test:coverage": "npm run build:test && npm run vitest:coverage",
     "test:watch": "npm run build:ts && vitest --watch",
     "clean:ts": "tsc -b --clean",
-    "lint": "eslint src/**/*.ts --fix",
+    "lint": "eslint src/**/*.ts example/**/*.ts --fix",
     "format": "prettier --write src/**/*.ts example/**/*.ts",
     "validate": "npm run lint && npm run test:dryrun"
   },

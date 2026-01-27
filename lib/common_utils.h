@@ -19,6 +19,7 @@
 
 #include <cstdlib>
 #include <chrono>
+#include <napi.h>
 
 namespace __node_rocketmq__ {
 
@@ -36,6 +37,16 @@ inline bool IsEnvEnabled(const char* name) {
 namespace config {
   constexpr std::chrono::seconds DEFAULT_MESSAGE_TIMEOUT{30};
   constexpr int MAX_BACKTRACE_FRAMES = 64;
+}
+
+// 通用工具函数
+namespace utils {
+  // 设置日志配置的通用函数
+  void SetLoggerOptions(const Napi::Object& options);
+  
+  // 参数验证辅助函数
+  bool ValidateStringArguments(const Napi::CallbackInfo& info, size_t count, const char* error_msg);
+  bool ValidateCallback(const Napi::CallbackInfo& info, size_t index, const char* error_msg);
 }
 
 }  // namespace __node_rocketmq__

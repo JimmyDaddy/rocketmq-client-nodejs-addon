@@ -254,17 +254,13 @@ export class RocketMQPushConsumer extends EventEmitter {
     if (expression && typeof expression !== 'string') {
       throw new Error('Expression must be a string if provided');
     }
-    // Allow subscribe in STOPPED and STARTED states
-    // Prevent subscribe during state transitions (STARTING/STOPPING)
-    if (this.status === Status.STARTING) {
-      throw new Error('Cannot subscribe while consumer is starting, please wait for start to complete');
-    }
+    
+    // C++ 代码只检查 destroyed 和 shutting_down 状态
+    // 允许在 STOPPED 和 STARTED 状态下订阅
     if (this.status === Status.STOPPING) {
       throw new Error('Cannot subscribe while consumer is stopping');
     }
-    if (this.status === Status.STARTED) {
-      throw new Error('Cannot subscribe while consumer is started, please shutdown first');
-    }
+    
     this.core.subscribe(topic, expression);
   }
 }

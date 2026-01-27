@@ -128,47 +128,16 @@ void RocketMQProducer::SetOptions(const Napi::Object& options) {
     producer_.set_send_msg_timeout(send_message_timeout.ToNumber());
   }
 
-  // set log level
-  Napi::Value log_level = options.Get("logLevel");
-  if (log_level.IsNumber()) {
-    int32_t level = log_level.ToNumber();
-    if (level >= 0 && level < rocketmq::LogLevel::LOG_LEVEL_LEVEL_NUM) {
-      rocketmq::GetDefaultLoggerConfig().set_level(
-          static_cast<rocketmq::LogLevel>(level));
-    }
-  }
-
-  // set log directory
-  Napi::Value log_dir = options.Get("logDir");
-  if (log_dir.IsString()) {
-    rocketmq::GetDefaultLoggerConfig().set_path(log_dir.ToString());
-  }
-
-  // set log file size
-  Napi::Value log_file_size = options.Get("logFileSize");
-  if (log_file_size.IsNumber()) {
-    rocketmq::GetDefaultLoggerConfig().set_file_size(log_file_size.ToNumber());
-  }
-
-  // set log file num
-  Napi::Value log_file_num = options.Get("logFileNum");
-  if (log_file_num.IsNumber()) {
-    rocketmq::GetDefaultLoggerConfig().set_file_count(log_file_num.ToNumber());
-  }
+  // 使用通用的日志配置函数
+  utils::SetLoggerOptions(options);
 }
 
 Napi::Value RocketMQProducer::SetSessionCredentials(
     const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
 
-  // Check if required parameters are provided
-  if (info.Length() < 3) {
-    Napi::TypeError::New(env, "Wrong number of arguments").ThrowAsJavaScriptException();
-    return env.Undefined();
-  }
-
-  if (!info[0].IsString() || !info[1].IsString() || !info[2].IsString()) {
-    Napi::TypeError::New(env, "All arguments must be strings").ThrowAsJavaScriptException();
+  // 使用通用的参数验证函数
+  if (!utils::ValidateStringArguments(info, 3, "All arguments must be strings")) {
     return env.Undefined();
   }
 
@@ -228,9 +197,8 @@ class ProducerStartWorker : public Napi::AsyncWorker {
 Napi::Value RocketMQProducer::Start(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
 
-  // Check if callback is provided and is a function
-  if (info.Length() < 1 || !info[0].IsFunction()) {
-    Napi::TypeError::New(env, "Function expected as first argument").ThrowAsJavaScriptException();
+  // 使用通用的回调验证函数
+  if (!utils::ValidateCallback(info, 0, "Function expected as first argument")) {
     return env.Undefined();
   }
 
@@ -288,9 +256,8 @@ class ProducerShutdownWorker : public Napi::AsyncWorker {
 Napi::Value RocketMQProducer::Shutdown(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
 
-  // Check if callback is provided and is a function
-  if (info.Length() < 1 || !info[0].IsFunction()) {
-    Napi::TypeError::New(env, "Function expected as first argument").ThrowAsJavaScriptException();
+  // 使用通用的回调验证函数
+  if (!utils::ValidateCallback(info, 0, "Function expected as first argument")) {
     return env.Undefined();
   }
 
